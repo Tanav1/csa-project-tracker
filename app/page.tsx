@@ -92,10 +92,10 @@ export default async function DashboardPage({
 
         {/* Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <MetricCard label="Total hrs/wk saved" value={String(totalHrsPerWeek)} unit="hrs" />
+          <MetricCard label="Total hrs/wk saved" value={fmtNum(totalHrsPerWeek)} unit="hrs" />
           <MetricCard
             label="Effective hrs/wk"
-            value={effectiveHrs.toFixed(1)}
+            value={fmtNum(effectiveHrs)}
             unit="hrs"
             sub="weighted by completion"
           />
@@ -121,6 +121,11 @@ export default async function DashboardPage({
       </main>
     </div>
   )
+}
+
+function fmtNum(n: number): string {
+  if (n % 1 === 0) return String(n)
+  return parseFloat(n.toFixed(1)).toString()
 }
 
 function MetricCard({ label, value, unit, sub }: { label: string; value: string; unit: string; sub?: string }) {
