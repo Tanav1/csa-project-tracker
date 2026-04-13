@@ -19,21 +19,18 @@ export default async function DashboardPage({
 
   const supabase = createClient()
 
-  // Filtered use cases
   let query = supabase.from('use_cases').select('*').order('display_order')
   if (statusFilter !== 'all') query = query.eq('status', statusFilter)
   if (priorityFilter !== 'all') query = query.eq('priority', priorityFilter)
   const { data: rawUseCases } = await query
   const useCases = (rawUseCases ?? []) as UseCase[]
 
-  // Tasks for visible use cases
   const useCaseIds = useCases.map(u => u.id)
   const { data: rawTasks } = useCaseIds.length > 0
     ? await supabase.from('tasks').select('*').in('use_case_id', useCaseIds)
     : { data: [] }
   const allTasks = (rawTasks ?? []) as Task[]
 
-  // Unfiltered totals for metrics header
   const { data: rawAll } = await supabase.from('use_cases').select('*')
   const allUseCases = (rawAll ?? []) as UseCase[]
   const totalHrsPerWeek = allUseCases.reduce((s, u) => s + (u.hours_per_week ?? 0), 0)
@@ -57,7 +54,10 @@ export default async function DashboardPage({
       {/* Nav */}
       <header className="bg-white border-b" style={{ borderColor: '#ECECEC' }}>
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <span className="text-lg font-bold" style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}>
+          <span
+            className="text-lg font-bold"
+            style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}
+          >
             savvy
           </span>
           <div className="flex items-center gap-4">
@@ -82,39 +82,72 @@ export default async function DashboardPage({
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <p className="font-caption text-xs mb-1" style={{ color: '#89837C' }}>CSA Automation</p>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
+      <main className="max-w-6xl mx-auto px-6 py-10">
+        {/* Editorial title */}
+        <div className="mb-8 animate-fade-up">
+          <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>CSA Automation</p>
+          <h1
+            className="text-3xl font-bold leading-tight"
+            style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}
+          >
             Efficiency Dashboard
           </h1>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <MetricCard label="Total hrs/wk saved" value={fmtNum(totalHrsPerWeek)} unit="hrs" />
-          <MetricCard
+        {/* Metrics strip — editorial, no boxes */}
+        <div
+          className="flex flex-wrap items-start gap-0 mb-8 pb-8 border-b animate-fade-up"
+          style={{ borderColor: '#ECECEC', animationDelay: '60ms' }}
+        >
+          <MetricStrip
+            label="Total hrs/wk saved"
+            value={fmtNum(totalHrsPerWeek)}
+            unit="hrs"
+          />
+          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+          <MetricStrip
             label="Effective hrs/wk"
             value={fmtNum(effectiveHrs)}
             unit="hrs"
             sub="weighted by completion"
           />
-          <MetricCard label="Use cases" value={String(allUseCases.length)} unit="total" />
-          <MetricCard label="Active projects" value={String(activeCount)} unit="in progress" />
+          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+          <MetricStrip
+            label="Use cases"
+            value={String(allUseCases.length)}
+            unit="total"
+          />
+          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+          <MetricStrip
+            label="Active"
+            value={String(activeCount)}
+            unit="in progress"
+          />
         </div>
 
         {/* Filters */}
-        <DashboardFilters currentStatus={statusFilter} currentPriority={priorityFilter} />
+        <div className="mb-6 animate-fade-up" style={{ animationDelay: '100ms' }}>
+          <DashboardFilters currentStatus={statusFilter} currentPriority={priorityFilter} />
+        </div>
 
         {/* Grid */}
         {useCases.length === 0 ? (
-          <div className="text-center py-16" style={{ color: '#89837C' }}>
+          <div
+            className="text-center py-20 font-caption text-xs animate-fade-up"
+            style={{ color: '#89837C', animationDelay: '140ms' }}
+          >
             No use cases match the selected filters.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-            {useCases.map(uc => (
-              <UseCaseCard key={uc.id} useCase={uc} tasks={tasksFor(uc.id)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {useCases.map((uc, i) => (
+              <div
+                key={uc.id}
+                className="animate-fade-up"
+                style={{ animationDelay: `${140 + i * 40}ms` }}
+              >
+                <UseCaseCard useCase={uc} tasks={tasksFor(uc.id)} />
+              </div>
             ))}
           </div>
         )}
@@ -128,15 +161,32 @@ function fmtNum(n: number): string {
   return parseFloat(n.toFixed(1)).toString()
 }
 
-function MetricCard({ label, value, unit, sub }: { label: string; value: string; unit: string; sub?: string }) {
+function MetricStrip({
+  label,
+  value,
+  unit,
+  sub,
+}: {
+  label: string
+  value: string
+  unit: string
+  sub?: string
+}) {
   return (
-    <div className="bg-white rounded-lg border p-4" style={{ borderColor: '#ECECEC' }}>
+    <div className="py-1">
       <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>{label}</p>
-      <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>{value}</span>
-        <span className="text-xs" style={{ color: '#767676' }}>{unit}</span>
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className="font-bold leading-none"
+          style={{ fontFamily: 'Diatype, sans-serif', fontSize: '2.5rem', letterSpacing: '-0.03em' }}
+        >
+          {value}
+        </span>
+        <span className="text-sm" style={{ color: '#767676' }}>{unit}</span>
       </div>
-      {sub && <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>{sub}</p>}
+      {sub && (
+        <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>{sub}</p>
+      )}
     </div>
   )
 }
