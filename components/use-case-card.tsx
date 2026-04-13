@@ -25,7 +25,7 @@ export function UseCaseCard({ useCase, tasks }: { useCase: UseCase; tasks: Task[
 
   return (
     <Link
-      href={`/use-cases/${useCase.id}`}
+      href={`/use-cases/${useCase.slug ?? useCase.id}`}
       className="group flex flex-col bg-white rounded-xl overflow-hidden card-lift"
     >
       {/* Status accent stripe at top */}

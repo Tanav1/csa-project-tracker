@@ -14,14 +14,17 @@ function taskCol(t: Task): Col {
 }
 
 const COLS: { id: Col; label: string; dot: string }[] = [
-  { id: 'todo',  label: 'To Do',       dot: '#B2AAA1' },
-  { id: 'doing', label: 'In Progress',  dot: '#D79F32' },
-  { id: 'done',  label: 'Done',         dot: '#175242' },
+  { id: 'todo',  label: 'To Do',      dot: '#B2AAA1' },
+  { id: 'doing', label: 'In Progress', dot: '#D79F32' },
+  { id: 'done',  label: 'Done',        dot: '#175242' },
 ]
 
 const CATEGORIES = [
-  'Discovery', 'Backend', 'Frontend', 'Integration',
-  'Security', 'Deployment', 'AI', 'Other',
+  'Discovery', 'Backend Setup', 'Backend', 'Frontend Setup', 'Frontend',
+  'Core Extraction', 'Matching Logic', 'Integration', 'Security',
+  'Deployment', 'Form Mapping', 'Extraction Refinement',
+  'Backend / Infra', 'Frontend / UI', 'AI Prioritization',
+  'Gmail Integration', 'Slack Integration', 'DocuSign Integration', 'Other',
 ]
 
 interface Props {
@@ -37,6 +40,7 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
   const [addingTo, setAddingTo] = useState<Col | null>(null)
   const [newName, setNewName] = useState('')
   const [newCat, setNewCat] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
   const supabase = createClient()
@@ -102,6 +106,14 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
     startTransition(() => router.refresh())
   }
 
+  async function saveTaskEdit(updated: Partial<Task> & { id: string }) {
+    setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+    setEditingTask(null)
+    const { id, ...fields } = updated
+    await supabase.from('tasks').update(fields as never).eq('id', id)
+    startTransition(() => router.refresh())
+  }
+
   const done = tasks.filter(t => t.percent_complete === 100 || t.is_complete).length
   const overallPct = tasks.length === 0
     ? 0
@@ -152,7 +164,6 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
                 onClick={() => { setAddingTo(col.id); setNewName(''); setNewCat('') }}
                 className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-sm leading-none"
                 style={{ color: '#89837C' }}
-                title={`Add to ${col.label}`}
               >
                 +
               </button>
@@ -203,7 +214,7 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
               </div>
             )}
 
-            {/* Cards */}
+            {/* Task cards */}
             {byCol(col.id).map(task => (
               <TaskCard
                 key={task.id}
@@ -213,11 +224,22 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
                 onDragEnd={() => { setDragging(null); setDragOver(null) }}
                 onDelete={deleteTask}
                 onUpdatePct={updatePct}
+                onEdit={() => setEditingTask(task)}
               />
             ))}
           </div>
         ))}
       </div>
+
+      {/* Task edit modal */}
+      {editingTask && (
+        <TaskEditModal
+          task={editingTask}
+          onSave={saveTaskEdit}
+          onClose={() => setEditingTask(null)}
+          onDelete={id => { deleteTask(id); setEditingTask(null) }}
+        />
+      )}
     </div>
   )
 }
@@ -229,6 +251,7 @@ function TaskCard({
   onDragEnd,
   onDelete,
   onUpdatePct,
+  onEdit,
 }: {
   task: Task
   isDragging: boolean
@@ -236,6 +259,7 @@ function TaskCard({
   onDragEnd: () => void
   onDelete: (id: string) => void
   onUpdatePct: (id: string, pct: number) => void
+  onEdit: () => void
 }) {
   const [editPct, setEditPct] = useState(false)
   const [pct, setPct] = useState(task.percent_complete)
@@ -251,7 +275,8 @@ function TaskCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className="group bg-white rounded-lg border px-3 py-2.5 cursor-grab active:cursor-grabbing select-none transition-shadow hover:shadow-sm"
+      onClick={onEdit}
+      className="group bg-white rounded-lg border px-3 py-2.5 cursor-pointer select-none transition-shadow hover:shadow-sm"
       style={{
         borderColor: '#ECECEC',
         opacity: isDragging ? 0.35 : 1,
@@ -263,7 +288,7 @@ function TaskCard({
         </p>
         <button
           onMouseDown={e => e.stopPropagation()}
-          onClick={() => onDelete(task.id)}
+          onClick={e => { e.stopPropagation(); onDelete(task.id) }}
           className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-red-50 text-xs"
           style={{ color: '#B63D35' }}
         >
@@ -276,7 +301,7 @@ function TaskCard({
       )}
 
       {inProgress && (
-        <div className="mt-2">
+        <div className="mt-2" onClick={e => e.stopPropagation()}>
           {editPct ? (
             <input
               autoFocus
@@ -292,7 +317,7 @@ function TaskCard({
             />
           ) : (
             <button
-              onClick={() => setEditPct(true)}
+              onClick={e => { e.stopPropagation(); setEditPct(true) }}
               className="font-caption text-xs px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
               style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}
             >
@@ -301,6 +326,170 @@ function TaskCard({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function TaskEditModal({
+  task,
+  onSave,
+  onClose,
+  onDelete,
+}: {
+  task: Task
+  onSave: (updated: Partial<Task> & { id: string }) => void
+  onClose: () => void
+  onDelete: (id: string) => void
+}) {
+  const [form, setForm] = useState({
+    name: task.name,
+    category: task.category ?? '',
+    start_date: task.start_date ?? '',
+    end_date: task.end_date ?? '',
+    percent_complete: task.percent_complete,
+  })
+
+  function save() {
+    if (!form.name.trim()) return
+    onSave({
+      id: task.id,
+      name: form.name.trim(),
+      category: form.category || null,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
+      percent_complete: form.percent_complete,
+      is_complete: form.percent_complete === 100,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col"
+        style={{ boxShadow: '0 24px 48px rgba(0,0,0,0.16)' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: '#ECECEC' }}>
+          <h3 className="text-sm font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
+            Edit task
+          </h3>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-sm"
+            style={{ color: '#89837C' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-3">
+          <TF label="Task name">
+            <input
+              autoFocus
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') save() }}
+              className={ic}
+              style={is}
+            />
+          </TF>
+
+          <TF label="Category">
+            <select
+              value={form.category}
+              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+              className={ic}
+              style={{ ...is, color: form.category ? '#000' : '#89837C' }}
+            >
+              <option value="">None</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </TF>
+
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Start date">
+              <input
+                type="date"
+                value={form.start_date}
+                onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+                className={ic}
+                style={is}
+              />
+            </TF>
+            <TF label="End date">
+              <input
+                type="date"
+                value={form.end_date}
+                onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+                className={ic}
+                style={is}
+              />
+            </TF>
+          </div>
+
+          <TF label={`Progress — ${form.percent_complete}%`}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={form.percent_complete}
+              onChange={e => setForm(f => ({ ...f, percent_complete: Number(e.target.value) }))}
+              className="w-full accent-green-800"
+            />
+          </TF>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-2 px-5 py-4 border-t" style={{ borderColor: '#ECECEC' }}>
+          <button
+            onClick={save}
+            disabled={!form.name.trim()}
+            className="flex-1 py-2 rounded text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            style={{ backgroundColor: '#175242', fontFamily: 'Diatype, sans-serif' }}
+          >
+            Save
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded text-sm border transition-colors hover:bg-gray-50"
+            style={{ borderColor: '#ECECEC', color: '#767676' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onDelete(task.id)}
+            className="px-3 py-2 rounded text-sm transition-colors hover:bg-red-50"
+            style={{ color: '#B63D35' }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const ic = 'w-full px-3 py-2 rounded border text-sm bg-white outline-none focus:border-black transition-colors'
+const is: React.CSSProperties = { borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }
+
+function TF({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block font-caption text-xs mb-1.5" style={{ color: '#89837C' }}>
+        {label}
+      </label>
+      {children}
     </div>
   )
 }

@@ -11,22 +11,24 @@ import Link from 'next/link'
 export default async function UseCasePage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ slug: string }>
 }) {
-  const { id } = await params
+  const { slug } = await params
   const session = await auth()
   if (!session?.user) redirect('/login')
 
   const supabase = createClient()
 
-  const [{ data: rawUseCase }, { data: rawTasks }] = await Promise.all([
-    supabase.from('use_cases').select('*').eq('id', id).single(),
-    supabase.from('tasks').select('*').eq('use_case_id', id).order('created_at'),
-  ])
+  const { data: rawUseCase } = await supabase
+    .from('use_cases').select('*').eq('slug', slug).single()
 
   if (!rawUseCase) notFound()
 
   const useCase = rawUseCase as UseCase
+
+  const { data: rawTasks } = await supabase
+    .from('tasks').select('*').eq('use_case_id', useCase.id).order('created_at')
+
   const taskList = (rawTasks ?? []) as Task[]
 
   const percent =
@@ -130,7 +132,7 @@ export default async function UseCasePage({
         {/* Kanban board */}
         <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#ECECEC' }}>
           <KanbanBoard
-            useCaseId={id}
+            useCaseId={useCase.id}
             initialTasks={taskList}
             hoursPerWeek={useCase.hours_per_week}
           />

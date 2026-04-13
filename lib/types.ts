@@ -3,6 +3,7 @@ export type UseCaseStatus = 'Not Started' | 'In Progress' | 'Blocked' | 'Complet
 
 export interface UseCase {
   id: string
+  slug: string | null
   name: string
   problem: string | null
   solution: string | null
