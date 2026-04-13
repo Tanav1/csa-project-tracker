@@ -1,65 +1,137 @@
-import Image from "next/image";
+import { auth, signOut } from '@/auth'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { UseCaseCard } from '@/components/use-case-card'
+import type { UseCase, Task } from '@/lib/types'
+import { DashboardFilters } from '@/components/dashboard-filters'
 
-export default function Home() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; priority?: string }>
+}) {
+  const session = await auth()
+  if (!session?.user) redirect('/login')
+
+  const filters = await searchParams
+  const statusFilter = filters.status ?? 'all'
+  const priorityFilter = filters.priority ?? 'all'
+
+  const supabase = createClient()
+
+  // Filtered use cases
+  let query = supabase.from('use_cases').select('*').order('display_order')
+  if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+  if (priorityFilter !== 'all') query = query.eq('priority', priorityFilter)
+  const { data: rawUseCases } = await query
+  const useCases = (rawUseCases ?? []) as UseCase[]
+
+  // Tasks for visible use cases
+  const useCaseIds = useCases.map(u => u.id)
+  const { data: rawTasks } = useCaseIds.length > 0
+    ? await supabase.from('tasks').select('*').in('use_case_id', useCaseIds)
+    : { data: [] }
+  const allTasks = (rawTasks ?? []) as Task[]
+
+  // Unfiltered totals for metrics header
+  const { data: rawAll } = await supabase.from('use_cases').select('*')
+  const allUseCases = (rawAll ?? []) as UseCase[]
+  const totalHrsPerWeek = allUseCases.reduce((s, u) => s + (u.hours_per_week ?? 0), 0)
+  const activeCount = allUseCases.filter(u => u.status === 'In Progress').length
+
+  function tasksFor(id: string): Task[] {
+    return allTasks.filter(t => t.use_case_id === id)
+  }
+
+  function calcPercent(tasks: Task[]) {
+    if (tasks.length === 0) return 0
+    return Math.round(tasks.reduce((s, t) => s + t.percent_complete, 0) / tasks.length)
+  }
+
+  const effectiveHrs = useCases.reduce((s, u) => {
+    return s + (u.hours_per_week ?? 0) * (calcPercent(tasksFor(u.id)) / 100)
+  }, 0)
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen" style={{ backgroundColor: '#FFF8F1' }}>
+      {/* Nav */}
+      <header className="bg-white border-b" style={{ borderColor: '#ECECEC' }}>
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+          <span className="text-lg font-bold" style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}>
+            savvy
+          </span>
+          <div className="flex items-center gap-4">
+            <span className="font-caption text-xs hidden sm:block" style={{ color: '#89837C' }}>
+              {session.user.email}
+            </span>
+            <form
+              action={async () => {
+                'use server'
+                await signOut({ redirectTo: '/login' })
+              }}
+            >
+              <button
+                type="submit"
+                className="font-caption text-xs px-3 py-1.5 rounded border transition-colors hover:bg-gray-50"
+                style={{ borderColor: '#ECECEC', color: '#767676' }}
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        <div className="mb-8">
+          <p className="font-caption text-xs mb-1" style={{ color: '#89837C' }}>CSA Automation</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
+            Efficiency Dashboard
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <MetricCard label="Total hrs/wk saved" value={String(totalHrsPerWeek)} unit="hrs" />
+          <MetricCard
+            label="Effective hrs/wk"
+            value={effectiveHrs.toFixed(1)}
+            unit="hrs"
+            sub="weighted by completion"
+          />
+          <MetricCard label="Use cases" value={String(allUseCases.length)} unit="total" />
+          <MetricCard label="Active projects" value={String(activeCount)} unit="in progress" />
         </div>
+
+        {/* Filters */}
+        <DashboardFilters currentStatus={statusFilter} currentPriority={priorityFilter} />
+
+        {/* Grid */}
+        {useCases.length === 0 ? (
+          <div className="text-center py-16" style={{ color: '#89837C' }}>
+            No use cases match the selected filters.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+            {useCases.map(uc => (
+              <UseCaseCard key={uc.id} useCase={uc} tasks={tasksFor(uc.id)} />
+            ))}
+          </div>
+        )}
       </main>
     </div>
-  );
+  )
+}
+
+function MetricCard({ label, value, unit, sub }: { label: string; value: string; unit: string; sub?: string }) {
+  return (
+    <div className="bg-white rounded-lg border p-4" style={{ borderColor: '#ECECEC' }}>
+      <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>{label}</p>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>{value}</span>
+        <span className="text-xs" style={{ color: '#767676' }}>{unit}</span>
+      </div>
+      {sub && <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>{sub}</p>}
+    </div>
+  )
 }
