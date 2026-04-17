@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { UseCaseCard } from '@/components/use-case-card'
 import type { UseCase, Task } from '@/lib/types'
 import { DashboardFilters } from '@/components/dashboard-filters'
+import { EditableMetric } from '@/components/editable-metric'
+
+const ADMIN_EMAIL = 'tanav.thanjavuru@savvywealth.com'
 
 export default async function DashboardPage({
   searchParams,
@@ -33,8 +36,15 @@ export default async function DashboardPage({
 
   const { data: rawAll } = await supabase.from('use_cases').select('*')
   const allUseCases = (rawAll ?? []) as UseCase[]
-  const totalHrsPerWeek = allUseCases.reduce((s, u) => s + (u.hours_per_week ?? 0), 0)
   const activeCount = allUseCases.filter(u => u.status === 'In Progress').length
+
+  const { data: settingsRow } = await supabase
+    .from('dashboard_settings')
+    .select('value')
+    .eq('key', 'total_hrs_per_week')
+    .single()
+  const totalHrsPerWeek = (settingsRow?.value as number) ?? 0
+  const isAdmin = session.user.email === ADMIN_EMAIL
 
   function tasksFor(id: string): Task[] {
     return allTasks.filter(t => t.use_case_id === id)
@@ -99,10 +109,13 @@ export default async function DashboardPage({
           className="flex flex-wrap items-start gap-0 mb-8 pb-8 border-b animate-fade-up"
           style={{ borderColor: '#ECECEC', animationDelay: '60ms' }}
         >
-          <MetricStrip
+          <EditableMetric
             label="Total hrs/wk saved"
-            value={fmtNum(totalHrsPerWeek)}
+            value={totalHrsPerWeek}
             unit="hrs"
+            definition="Manually set headline figure for total hours per week saved across all automation use cases. Click to edit (admin only)."
+            settingsKey="total_hrs_per_week"
+            canEdit={isAdmin}
           />
           <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
           <MetricStrip
@@ -110,18 +123,21 @@ export default async function DashboardPage({
             value={fmtNum(effectiveHrs)}
             unit="hrs"
             sub="weighted by completion"
+            definition="Total hrs/wk saved across all use cases, weighted by each project's completion percentage. Reflects hours actually being saved right now vs. the full potential once everything ships."
           />
           <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
           <MetricStrip
             label="Use cases"
             value={String(allUseCases.length)}
             unit="total"
+            definition="Total number of automation use cases tracked in the dashboard, across all statuses and priorities."
           />
           <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
           <MetricStrip
             label="Active"
             value={String(activeCount)}
             unit="in progress"
+            definition="Use cases currently in the 'In Progress' state — actively being built or deployed."
           />
         </div>
 
@@ -166,15 +182,39 @@ function MetricStrip({
   value,
   unit,
   sub,
+  definition,
 }: {
   label: string
   value: string
   unit: string
   sub?: string
+  definition?: string
 }) {
   return (
     <div className="py-1">
-      <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>{label}</p>
+      <div className="flex items-center gap-1 mb-2">
+        <p className="font-caption text-xs" style={{ color: '#89837C' }}>{label}</p>
+        {definition && (
+          <div className="relative group/tip">
+            <span
+              className="font-caption text-xs leading-none cursor-default select-none"
+              style={{ color: '#C8C2BB' }}
+            >
+              ?
+            </span>
+            <div
+              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-xs leading-snug opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity duration-150 z-20"
+              style={{ backgroundColor: '#1A1A1A', color: '#F5F2EC' }}
+            >
+              {definition}
+              <div
+                className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"
+                style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1A1A1A' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
       <div className="flex items-baseline gap-1.5">
         <span
           className="font-bold leading-none"

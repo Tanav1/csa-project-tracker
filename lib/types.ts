@@ -30,6 +30,7 @@ export interface Task {
   category: string | null
   start_date: string | null
   end_date: string | null
+  hours: number | null
   created_at: string
   updated_at: string
 }

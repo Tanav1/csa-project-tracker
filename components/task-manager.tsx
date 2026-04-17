@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Task } from '@/lib/types'
+import { CATEGORIES, CUSTOM_CATEGORY_SENTINEL } from '@/lib/constants'
 import { ProgressRing } from './progress-ring'
 
 interface TaskManagerProps {
@@ -12,14 +13,6 @@ interface TaskManagerProps {
   percent: number
   hoursPerWeek: number
 }
-
-const CATEGORIES = [
-  'Discovery', 'Backend Setup', 'Backend', 'Frontend Setup', 'Frontend',
-  'Core Extraction', 'Matching Logic', 'Integration', 'Security',
-  'Deployment', 'Form Mapping', 'Extraction Refinement',
-  'Backend / Infra', 'Frontend / UI', 'AI Prioritization',
-  'Gmail Integration', 'Slack Integration', 'DocuSign Integration', 'Other',
-]
 
 export function TaskManager({ useCaseId, initialTasks, percent, hoursPerWeek }: TaskManagerProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -35,7 +28,13 @@ export function TaskManager({ useCaseId, initialTasks, percent, hoursPerWeek }: 
     start_date: '',
     end_date: '',
     percent_complete: 0,
+    hours: '',
   })
+  const [customCat, setCustomCat] = useState('')
+
+  function resolvedCategory() {
+    return newTask.category === CUSTOM_CATEGORY_SENTINEL ? customCat.trim() : newTask.category
+  }
 
   async function addTask() {
     if (!newTask.name.trim()) return
@@ -44,17 +43,19 @@ export function TaskManager({ useCaseId, initialTasks, percent, hoursPerWeek }: 
       .insert({
         use_case_id: useCaseId,
         name: newTask.name.trim(),
-        category: newTask.category || null,
+        category: resolvedCategory() || null,
         start_date: newTask.start_date || null,
         end_date: newTask.end_date || null,
         percent_complete: newTask.percent_complete,
         is_complete: newTask.percent_complete === 100,
+        hours: newTask.hours !== '' ? parseFloat(newTask.hours) : null,
       } as never)
       .select()
       .single()
     if (!error && data) {
       setTasks(prev => [...prev, data as Task])
-      setNewTask({ name: '', category: '', start_date: '', end_date: '', percent_complete: 0 })
+      setNewTask({ name: '', category: '', start_date: '', end_date: '', percent_complete: 0, hours: '' })
+      setCustomCat('')
       setShowAdd(false)
       startTransition(() => router.refresh())
     }
@@ -110,28 +111,62 @@ export function TaskManager({ useCaseId, initialTasks, percent, hoursPerWeek }: 
                 style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }}
               />
             </div>
-            <select
-              value={newTask.category}
-              onChange={e => setNewTask(p => ({ ...p, category: e.target.value }))}
-              className="px-3 py-2 rounded border text-sm bg-white"
-              style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif', color: newTask.category ? '#000' : '#89837C' }}
-            >
-              <option value="">Category (optional)</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <div className="flex items-center gap-2">
-              <label className="font-caption text-xs whitespace-nowrap" style={{ color: '#89837C' }}>
-                % complete
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={newTask.percent_complete}
-                onChange={e => setNewTask(p => ({ ...p, percent_complete: Math.min(100, Math.max(0, Number(e.target.value))) }))}
-                className="w-20 px-3 py-2 rounded border text-sm bg-white"
-                style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }}
-              />
+            <div className="flex flex-col gap-2">
+              <select
+                value={newTask.category}
+                onChange={e => {
+                  setNewTask(p => ({ ...p, category: e.target.value }))
+                  if (e.target.value !== CUSTOM_CATEGORY_SENTINEL) setCustomCat('')
+                }}
+                className="px-3 py-2 rounded border text-sm bg-white"
+                style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif', color: newTask.category ? '#000' : '#89837C' }}
+              >
+                <option value="">Category (optional)</option>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value={CUSTOM_CATEGORY_SENTINEL}>Custom…</option>
+              </select>
+              {newTask.category === CUSTOM_CATEGORY_SENTINEL && (
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Enter custom category"
+                  value={customCat}
+                  onChange={e => setCustomCat(e.target.value)}
+                  className="px-3 py-2 rounded border text-sm bg-white"
+                  style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="font-caption text-xs whitespace-nowrap" style={{ color: '#89837C' }}>
+                  % complete
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={newTask.percent_complete}
+                  onChange={e => setNewTask(p => ({ ...p, percent_complete: Math.min(100, Math.max(0, Number(e.target.value))) }))}
+                  className="w-20 px-3 py-2 rounded border text-sm bg-white"
+                  style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="font-caption text-xs whitespace-nowrap" style={{ color: '#89837C' }}>
+                  hrs
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="0"
+                  value={newTask.hours}
+                  onChange={e => setNewTask(p => ({ ...p, hours: e.target.value }))}
+                  className="w-20 px-3 py-2 rounded border text-sm bg-white"
+                  style={{ borderColor: '#D3CDC4', fontFamily: 'Diatype, sans-serif' }}
+                />
+              </div>
             </div>
             <input
               type="date"
@@ -233,6 +268,14 @@ function TaskRow({
           <p className="font-caption text-xs mt-0.5" style={{ color: '#B2AAA1' }}>{task.category}</p>
         )}
       </div>
+
+      {/* Hours */}
+      {task.hours != null && (
+        <div className="hidden sm:flex items-center gap-1 flex-shrink-0 font-caption text-xs" style={{ color: '#B2AAA1' }}>
+          <span>{task.hours % 1 === 0 ? task.hours : task.hours.toFixed(1)}</span>
+          <span>hrs</span>
+        </div>
+      )}
 
       {/* Dates */}
       {(task.start_date || task.end_date) && (

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Task } from '@/lib/types'
+import { CATEGORIES, CUSTOM_CATEGORY_SENTINEL } from '@/lib/constants'
 
 type Col = 'todo' | 'doing' | 'done'
 
@@ -19,14 +20,6 @@ const COLS: { id: Col; label: string; dot: string }[] = [
   { id: 'done',  label: 'Done',        dot: '#175242' },
 ]
 
-const CATEGORIES = [
-  'Discovery', 'Backend Setup', 'Backend', 'Frontend Setup', 'Frontend',
-  'Core Extraction', 'Matching Logic', 'Integration', 'Security',
-  'Deployment', 'Form Mapping', 'Extraction Refinement',
-  'Backend / Infra', 'Frontend / UI', 'AI Prioritization',
-  'Gmail Integration', 'Slack Integration', 'DocuSign Integration', 'Other',
-]
-
 interface Props {
   useCaseId: string
   initialTasks: Task[]
@@ -40,6 +33,8 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
   const [addingTo, setAddingTo] = useState<Col | null>(null)
   const [newName, setNewName] = useState('')
   const [newCat, setNewCat] = useState('')
+  const [newCatCustom, setNewCatCustom] = useState('')
+  const [newHours, setNewHours] = useState('')
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
@@ -66,6 +61,10 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
     startTransition(() => router.refresh())
   }
 
+  function resolvedNewCat() {
+    return newCat === CUSTOM_CATEGORY_SENTINEL ? newCatCustom.trim() : newCat
+  }
+
   async function addTask() {
     if (!addingTo || !newName.trim()) return
     const pct = addingTo === 'todo' ? 0 : addingTo === 'done' ? 100 : 50
@@ -74,9 +73,10 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
       .insert({
         use_case_id: useCaseId,
         name: newName.trim(),
-        category: newCat || null,
+        category: resolvedNewCat() || null,
         percent_complete: pct,
         is_complete: pct === 100,
+        hours: newHours !== '' ? parseFloat(newHours) : null,
       } as never)
       .select()
       .single()
@@ -84,6 +84,8 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
       setTasks(prev => [...prev, data as Task])
       setNewName('')
       setNewCat('')
+      setNewCatCustom('')
+      setNewHours('')
       setAddingTo(null)
       startTransition(() => router.refresh())
     }
@@ -161,7 +163,7 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
                 </span>
               </div>
               <button
-                onClick={() => { setAddingTo(col.id); setNewName(''); setNewCat('') }}
+                onClick={() => { setAddingTo(col.id); setNewName(''); setNewCat(''); setNewCatCustom('') }}
                 className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 transition-colors text-sm leading-none"
                 style={{ color: '#89837C' }}
               >
@@ -187,13 +189,41 @@ export function KanbanBoard({ useCaseId, initialTasks, hoursPerWeek }: Props) {
                 />
                 <select
                   value={newCat}
-                  onChange={e => setNewCat(e.target.value)}
+                  onChange={e => {
+                    setNewCat(e.target.value)
+                    if (e.target.value !== CUSTOM_CATEGORY_SENTINEL) setNewCatCustom('')
+                  }}
                   className="text-xs rounded border px-2 py-1 w-full bg-white"
                   style={{ borderColor: '#ECECEC', color: newCat ? '#000' : '#89837C' }}
                 >
                   <option value="">Category (optional)</option>
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value={CUSTOM_CATEGORY_SENTINEL}>Custom…</option>
                 </select>
+                {newCat === CUSTOM_CATEGORY_SENTINEL && (
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Enter custom category"
+                    value={newCatCustom}
+                    onChange={e => setNewCatCustom(e.target.value)}
+                    className="text-xs rounded border px-2 py-1 w-full outline-none"
+                    style={{ borderColor: '#ECECEC', fontFamily: 'Diatype, sans-serif' }}
+                  />
+                )}
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs whitespace-nowrap" style={{ color: '#89837C', fontFamily: 'Diatype, sans-serif' }}>hrs</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="0"
+                    value={newHours}
+                    onChange={e => setNewHours(e.target.value)}
+                    className="text-xs rounded border px-2 py-1 w-20 bg-white"
+                    style={{ borderColor: '#ECECEC', fontFamily: 'Diatype, sans-serif' }}
+                  />
+                </div>
                 <div className="flex gap-1.5">
                   <button
                     onClick={addTask}
@@ -341,24 +371,32 @@ function TaskEditModal({
   onClose: () => void
   onDelete: (id: string) => void
 }) {
+  const isCustomInitial = !!(task.category && !CATEGORIES.includes(task.category))
   const [form, setForm] = useState({
     name: task.name,
-    category: task.category ?? '',
+    category: isCustomInitial ? CUSTOM_CATEGORY_SENTINEL : (task.category ?? ''),
     start_date: task.start_date ?? '',
     end_date: task.end_date ?? '',
     percent_complete: task.percent_complete,
+    hours: task.hours != null ? String(task.hours) : '',
   })
+  const [customCat, setCustomCat] = useState(isCustomInitial ? (task.category ?? '') : '')
+
+  function resolvedCategory() {
+    return form.category === CUSTOM_CATEGORY_SENTINEL ? customCat.trim() : form.category
+  }
 
   function save() {
     if (!form.name.trim()) return
     onSave({
       id: task.id,
       name: form.name.trim(),
-      category: form.category || null,
+      category: resolvedCategory() || null,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
       percent_complete: form.percent_complete,
       is_complete: form.percent_complete === 100,
+      hours: form.hours !== '' ? parseFloat(form.hours) : null,
     })
   }
 
@@ -407,14 +445,31 @@ function TaskEditModal({
           <TF label="Category">
             <select
               value={form.category}
-              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+              onChange={e => {
+                setForm(f => ({ ...f, category: e.target.value }))
+                if (e.target.value !== CUSTOM_CATEGORY_SENTINEL) setCustomCat('')
+              }}
               className={ic}
               style={{ ...is, color: form.category ? '#000' : '#89837C' }}
             >
               <option value="">None</option>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value={CUSTOM_CATEGORY_SENTINEL}>Custom…</option>
             </select>
           </TF>
+          {form.category === CUSTOM_CATEGORY_SENTINEL && (
+            <TF label="Custom category name">
+              <input
+                autoFocus
+                type="text"
+                placeholder="e.g. Data Pipeline"
+                value={customCat}
+                onChange={e => setCustomCat(e.target.value)}
+                className={ic}
+                style={is}
+              />
+            </TF>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <TF label="Start date">
@@ -446,6 +501,19 @@ function TaskEditModal({
               value={form.percent_complete}
               onChange={e => setForm(f => ({ ...f, percent_complete: Number(e.target.value) }))}
               className="w-full accent-green-800"
+            />
+          </TF>
+
+          <TF label="Hours to complete">
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              placeholder="e.g. 4"
+              value={form.hours}
+              onChange={e => setForm(f => ({ ...f, hours: e.target.value }))}
+              className={ic}
+              style={is}
             />
           </TF>
         </div>

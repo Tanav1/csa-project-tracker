@@ -1,19 +1,223 @@
 import { auth } from '@/auth'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createRetoolClient } from '@/lib/supabase/retool'
+import { createFormFillingClient } from '@/lib/supabase/form-filling'
 import { StatusBadge } from '@/components/status-badge'
 import { PriorityBadge } from '@/components/priority-badge'
 import { KanbanBoard } from '@/components/kanban-board'
 import { EditUseCaseForm } from '@/components/edit-use-case-form'
+import { FormFillingLive, type FormFillingStats } from '@/components/form-filling-live'
+import { RetoolLive, type RetoolStats } from '@/components/retool-live'
 import type { UseCase, Task } from '@/lib/types'
 import Link from 'next/link'
 
+const FORM_FILLING_NAME = 'Ops Internal Form Preparation Tool'
+const RETOOL_NAME       = 'Ops Tasking Prioritization Tool'
+
+async function fetchFormFillingStats(): Promise<FormFillingStats> {
+  const ff = createFormFillingClient()
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const sevenDaysAgo  = new Date(now.getTime() -  7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: events } = await ff
+    .from('analytics_events')
+    .select('event, user_email, session_id, ts, props, form_title, folder')
+    .gte('ts', thirtyDaysAgo)
+    .limit(10000)
+
+  if (!events) return {
+    logins_30d: 0, active_users_7d: 0, forms_opened_30d: 0,
+    forms_matched_30d: 0, forms_downloaded_30d: 0, fill_rate: 0,
+    dropoff_rate: 0, avg_fill_time_min: 0, return_rate: 0,
+    top_forms: [], users: [],
+  }
+
+  const filtered = events.filter(e => e.user_email !== 'test@savvywealth.com')
+
+  const loginEvents    = filtered.filter(e => e.event === 'login')
+  const openEvents     = filtered.filter(e => e.event === 'form_open')
+  const matchEvents    = filtered.filter(e => e.event === 'match_complete')
+  const downloadEvents = filtered.filter(e => e.event === 'fill_complete')
+
+  // Active users in last 7d
+  const sevenDaysAgoMs = new Date(sevenDaysAgo).getTime()
+  const activeUserSet = new Set(
+    loginEvents
+      .filter(e => new Date(e.ts).getTime() >= sevenDaysAgoMs)
+      .map(e => e.user_email)
+      .filter(Boolean)
+  )
+
+  // email → display name from login props
+  const emailToName: Record<string, string> = {}
+  for (const ev of loginEvents) {
+    if (ev.user_email && (ev.props as { name?: string } | null)?.name) {
+      emailToName[ev.user_email] = (ev.props as { name: string }).name
+    }
+  }
+
+  // Per-user stats: logins, matches, downloads, last seen
+  type UserAcc = { name: string; logins: number; matches: number; downloads: number; lastSeen: number }
+  const userAcc: Record<string, UserAcc> = {}
+  const ensureUser = (email: string) => {
+    if (!userAcc[email]) {
+      userAcc[email] = {
+        name: emailToName[email] || email.split('@')[0],
+        logins: 0, matches: 0, downloads: 0, lastSeen: 0,
+      }
+    }
+  }
+  for (const ev of loginEvents) {
+    if (!ev.user_email) continue
+    ensureUser(ev.user_email)
+    userAcc[ev.user_email].logins++
+    const t = new Date(ev.ts).getTime()
+    if (t > userAcc[ev.user_email].lastSeen) userAcc[ev.user_email].lastSeen = t
+  }
+  for (const ev of matchEvents) {
+    if (!ev.user_email) continue
+    ensureUser(ev.user_email)
+    userAcc[ev.user_email].matches++
+    const t = new Date(ev.ts).getTime()
+    if (t > userAcc[ev.user_email].lastSeen) userAcc[ev.user_email].lastSeen = t
+  }
+  for (const ev of downloadEvents) {
+    if (!ev.user_email) continue
+    ensureUser(ev.user_email)
+    userAcc[ev.user_email].downloads++
+    const t = new Date(ev.ts).getTime()
+    if (t > userAcc[ev.user_email].lastSeen) userAcc[ev.user_email].lastSeen = t
+  }
+  const users = Object.entries(userAcc)
+    .map(([email, u]) => ({
+      email,
+      name: u.name,
+      logins: u.logins,
+      matches: u.matches,
+      downloads: u.downloads,
+      last_seen: u.lastSeen > 0 ? new Date(u.lastSeen).toISOString() : '',
+    }))
+    .sort((a, b) => b.matches - a.matches || b.logins - a.logins)
+
+  // Top forms: opens + matches per form_title
+  const formMap: Record<string, { opens: number; matches: number; folder: string }> = {}
+  for (const row of openEvents) {
+    const key = row.form_title || 'Unknown'
+    if (!formMap[key]) formMap[key] = { opens: 0, matches: 0, folder: row.folder || '' }
+    formMap[key].opens++
+  }
+  for (const row of matchEvents) {
+    const key = row.form_title || 'Unknown'
+    if (!formMap[key]) formMap[key] = { opens: 0, matches: 0, folder: row.folder || '' }
+    formMap[key].matches++
+  }
+  const topForms = Object.entries(formMap)
+    .map(([form_title, d]) => ({
+      form_title,
+      folder: d.folder,
+      opens: d.opens,
+      matches: d.matches,
+      fill_rate: d.opens > 0 ? Math.round((d.matches / d.opens) * 100) : 0,
+    }))
+    .sort((a, b) => b.opens - a.opens)
+    .slice(0, 10)
+
+  // Drop-off: sessions with form_open but no match_complete
+  const sessionsWithOpen  = new Set(openEvents.map(e => e.session_id).filter(Boolean) as string[])
+  const sessionsWithMatch = new Set(matchEvents.map(e => e.session_id).filter(Boolean) as string[])
+  const droppedCount = [...sessionsWithOpen].filter(s => !sessionsWithMatch.has(s)).length
+  const dropoff_rate = sessionsWithOpen.size > 0
+    ? Math.round((droppedCount / sessionsWithOpen.size) * 100)
+    : 0
+
+  // Avg time-to-fill: form_open → fill_complete matched by session_id
+  const sessionOpenTs: Record<string, number> = {}
+  for (const ev of openEvents) {
+    if (ev.session_id) sessionOpenTs[ev.session_id] = new Date(ev.ts).getTime()
+  }
+  const fillDeltas: number[] = []
+  for (const ev of downloadEvents) {
+    if (!ev.session_id) continue
+    const openTs = sessionOpenTs[ev.session_id]
+    if (!openTs) continue
+    const delta = (new Date(ev.ts).getTime() - openTs) / 60000
+    if (delta > 0 && delta < 120) fillDeltas.push(delta)
+  }
+  const avg_fill_time_min = fillDeltas.length > 0
+    ? Math.round(fillDeltas.reduce((a, b) => a + b, 0) / fillDeltas.length)
+    : 0
+
+  // Return rate: % of users active last 7d who were also active in the prior period
+  const recentActiveUsers = new Set(
+    filtered
+      .filter(e => e.user_email && new Date(e.ts).getTime() >= sevenDaysAgoMs)
+      .map(e => e.user_email as string)
+  )
+  const priorActiveUsers = new Set(
+    filtered
+      .filter(e => e.user_email && new Date(e.ts).getTime() < sevenDaysAgoMs)
+      .map(e => e.user_email as string)
+  )
+  const returningCount = [...recentActiveUsers].filter(u => priorActiveUsers.has(u)).length
+  const return_rate = recentActiveUsers.size > 0
+    ? Math.round((returningCount / recentActiveUsers.size) * 100)
+    : 0
+
+  return {
+    logins_30d: loginEvents.length,
+    active_users_7d: activeUserSet.size,
+    forms_opened_30d: openEvents.length,
+    forms_matched_30d: matchEvents.length,
+    forms_downloaded_30d: downloadEvents.length,
+    fill_rate: openEvents.length > 0 ? Math.round((matchEvents.length / openEvents.length) * 100) : 0,
+    dropoff_rate,
+    avg_fill_time_min,
+    return_rate,
+    top_forms: topForms,
+    users,
+  }
+}
+
+async function fetchRetoolStats(): Promise<RetoolStats> {
+  const retool = createRetoolClient()
+  const { data } = await retool
+    .from('task_internal')
+    .select('internal_status')
+    .limit(5000)
+
+  if (!data) return { total: 0, by_status: [] }
+
+  const ORDERED_STATUSES = [
+    'default', 'in_process', 'pending_client_signature', 'client_viewed',
+    'docs_sent_to_custodian', 'pending_custodian', 'pending_settlement',
+    'pending_advisor', 'needs_more_info', 'paused', 'completed',
+  ]
+
+  const counts: Record<string, number> = {}
+  for (const row of data) {
+    const s = row.internal_status ?? 'default'
+    counts[s] = (counts[s] ?? 0) + 1
+  }
+
+  const by_status = ORDERED_STATUSES
+    .filter(s => counts[s])
+    .map(s => ({ status: s, count: counts[s] }))
+
+  return { total: data.length, by_status }
+}
+
 export default async function UseCasePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ tab?: string }>
 }) {
-  const { slug } = await params
+  const [{ slug }, { tab }] = await Promise.all([params, searchParams])
+  const activeTab = tab === 'adoption' ? 'adoption' : 'details'
+
   const session = await auth()
   if (!session?.user) redirect('/login')
 
@@ -30,6 +234,16 @@ export default async function UseCasePage({
     .from('tasks').select('*').eq('use_case_id', useCase.id).order('created_at')
 
   const taskList = (rawTasks ?? []) as Task[]
+
+  const isFormFilling = useCase.name === FORM_FILLING_NAME
+  const isRetool      = useCase.name === RETOOL_NAME
+  const hasAdoptionTab = isFormFilling || isRetool
+
+  // Only fetch live data when the adoption tab is active
+  const [formFillingStats, retoolStats] = await Promise.all([
+    (isFormFilling && activeTab === 'adoption') ? fetchFormFillingStats() : Promise.resolve(null),
+    (isRetool      && activeTab === 'adoption') ? fetchRetoolStats()      : Promise.resolve(null),
+  ])
 
   const percent =
     taskList.length === 0
@@ -129,14 +343,52 @@ export default async function UseCasePage({
           </div>
         </div>
 
-        {/* Kanban board */}
-        <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#ECECEC' }}>
-          <KanbanBoard
-            useCaseId={useCase.id}
-            initialTasks={taskList}
-            hoursPerWeek={useCase.hours_per_week}
-          />
-        </div>
+        {/* Tab nav */}
+        {hasAdoptionTab && (
+          <div
+            className="flex gap-0 mb-6 border-b"
+            style={{ borderColor: '#ECECEC' }}
+          >
+            <Link
+              href={`/use-cases/${slug}`}
+              className="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+              style={{
+                borderColor: activeTab === 'details' ? '#1A1A1A' : 'transparent',
+                color: activeTab === 'details' ? '#1A1A1A' : '#89837C',
+              }}
+            >
+              Project Details
+            </Link>
+            <Link
+              href={`/use-cases/${slug}?tab=adoption`}
+              className="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+              style={{
+                borderColor: activeTab === 'adoption' ? '#1A1A1A' : 'transparent',
+                color: activeTab === 'adoption' ? '#1A1A1A' : '#89837C',
+              }}
+            >
+              Project Adoption
+            </Link>
+          </div>
+        )}
+
+        {/* Tab content */}
+        {activeTab === 'details' && (
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#ECECEC' }}>
+            <KanbanBoard
+              useCaseId={useCase.id}
+              initialTasks={taskList}
+              hoursPerWeek={useCase.hours_per_week}
+            />
+          </div>
+        )}
+
+        {activeTab === 'adoption' && (
+          <>
+            {formFillingStats && <FormFillingLive stats={formFillingStats} />}
+            {retoolStats      && <RetoolLive      stats={retoolStats} />}
+          </>
+        )}
       </main>
     </div>
   )
