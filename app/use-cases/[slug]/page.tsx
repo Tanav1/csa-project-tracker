@@ -1,7 +1,7 @@
 import { auth } from '@/auth'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { createRetoolClient } from '@/lib/supabase/retool'
+import { createRetoolServiceClient } from '@/lib/supabase/retool'
 import { createFormFillingClient } from '@/lib/supabase/form-filling'
 import { StatusBadge } from '@/components/status-badge'
 import { PriorityBadge } from '@/components/priority-badge'
@@ -181,31 +181,85 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
 }
 
 async function fetchRetoolStats(): Promise<RetoolStats> {
-  const retool = createRetoolClient()
-  const { data } = await retool
-    .from('task_internal')
-    .select('internal_status')
+  const client = createRetoolServiceClient()
+  const { data } = await client
+    .from('usage_events')
+    .select('user_email,event_type,created_at')
+    .order('created_at', { ascending: true })
     .limit(5000)
 
-  if (!data) return { total: 0, by_status: [] }
-
-  const ORDERED_STATUSES = [
-    'default', 'in_process', 'pending_client_signature', 'client_viewed',
-    'docs_sent_to_custodian', 'pending_custodian', 'pending_settlement',
-    'pending_advisor', 'needs_more_info', 'paused', 'completed',
-  ]
-
-  const counts: Record<string, number> = {}
-  for (const row of data) {
-    const s = row.internal_status ?? 'default'
-    counts[s] = (counts[s] ?? 0) + 1
+  if (!data || data.length === 0) {
+    return { active_users: 0, total_time_mins: 0, sessions: 0, status_changes: 0, per_user: [] }
   }
 
-  const by_status = ORDERED_STATUSES
-    .filter(s => counts[s])
-    .map(s => ({ status: s, count: counts[s] }))
+  // Port of app.py session logic
+  const SESSION_GAP_SECS  = 60 * 60
+  const SESSION_TAIL_MINS = 10
+  const SESSION_MIN_MINS  = 8
 
-  return { total: data.length, by_status }
+  type UserAcc = { status_changes: number; sessions: number; time_spent_mins: number; last_seen: string | null }
+  const summary: Record<string, UserAcc> = {}
+
+  // Group events per user
+  const userEvents: Record<string, typeof data> = {}
+  for (const e of data) {
+    const em = e.user_email ?? 'unknown'
+    if (!userEvents[em]) userEvents[em] = []
+    userEvents[em].push(e)
+  }
+
+  for (const [em, events] of Object.entries(userEvents)) {
+    if (!summary[em]) summary[em] = { status_changes: 0, sessions: 0, time_spent_mins: 0, last_seen: null }
+
+    let sessionStart: Date | null = null
+    let sessionLast: Date | null = null
+
+    for (const e of events) {
+      if (!e.created_at) continue
+      const ts = new Date(e.created_at)
+
+      if (!sessionStart) {
+        sessionStart = ts
+        sessionLast = ts
+      } else {
+        const gap = (ts.getTime() - sessionLast!.getTime()) / 1000
+        if (gap > SESSION_GAP_SECS) {
+          const active = Math.round((sessionLast!.getTime() - sessionStart.getTime()) / 60000)
+          summary[em].time_spent_mins += Math.max(SESSION_MIN_MINS, active + SESSION_TAIL_MINS)
+          summary[em].sessions += 1
+          sessionStart = ts
+        }
+        sessionLast = ts
+      }
+    }
+    // Close final session
+    if (sessionStart) {
+      const active = Math.round((sessionLast!.getTime() - sessionStart.getTime()) / 60000)
+      summary[em].time_spent_mins += Math.max(SESSION_MIN_MINS, active + SESSION_TAIL_MINS)
+      summary[em].sessions += 1
+    }
+
+    for (const e of events) {
+      if (e.event_type === 'status_change' || e.event_type === 'status_change_bulk') {
+        summary[em].status_changes += 1
+      }
+      if (e.created_at && (!summary[em].last_seen || e.created_at > summary[em].last_seen!)) {
+        summary[em].last_seen = e.created_at
+      }
+    }
+  }
+
+  const per_user = Object.entries(summary)
+    .map(([email, u]) => ({ email, ...u }))
+    .sort((a, b) => b.time_spent_mins - a.time_spent_mins)
+
+  return {
+    active_users:     per_user.length,
+    total_time_mins:  per_user.reduce((s, u) => s + u.time_spent_mins, 0),
+    sessions:         per_user.reduce((s, u) => s + u.sessions, 0),
+    status_changes:   per_user.reduce((s, u) => s + u.status_changes, 0),
+    per_user,
+  }
 }
 
 export default async function UseCasePage({
