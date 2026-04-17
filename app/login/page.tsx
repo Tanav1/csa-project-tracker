@@ -39,7 +39,7 @@ function LoginContent() {
         )}
         {error && error !== 'AccessDenied' && error !== 'Callback' && (
           <div className="text-sm px-3 py-2 rounded" style={{ backgroundColor: '#FEE2E2', color: '#B63D35' }}>
-            Authentication failed. Please try again.
+            Authentication failed: <code>{error}</code>
           </div>
         )}
 
