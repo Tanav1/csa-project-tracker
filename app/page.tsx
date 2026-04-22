@@ -46,6 +46,39 @@ export default async function DashboardPage({
   const totalHrsPerWeek = (settingsRow?.value as number) ?? 0
   const isAdmin = session.user.email === ADMIN_EMAIL
 
+  // Log this visit (non-blocking — don't await result)
+  void supabase.from('dashboard_opens').insert({
+    user_email: session.user.email ?? '',
+    user_name: session.user.name ?? null,
+  })
+
+  // Admin: fetch per-user visit summary for the last 90 days
+  let opensByUser: { user_email: string; user_name: string | null; visits: number; last_seen: string }[] = []
+  if (isAdmin) {
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: opensData } = await supabase
+      .from('dashboard_opens')
+      .select('user_email, user_name, opened_at')
+      .gte('opened_at', since)
+      .order('opened_at', { ascending: false })
+
+    if (opensData) {
+      const map = new Map<string, { user_name: string | null; visits: number; last_seen: string }>()
+      for (const row of opensData) {
+        const existing = map.get(row.user_email)
+        if (!existing) {
+          map.set(row.user_email, { user_name: row.user_name, visits: 1, last_seen: row.opened_at })
+        } else {
+          existing.visits++
+          if (row.opened_at > existing.last_seen) existing.last_seen = row.opened_at
+        }
+      }
+      opensByUser = Array.from(map.entries())
+        .map(([user_email, v]) => ({ user_email, ...v }))
+        .sort((a, b) => b.visits - a.visits)
+    }
+  }
+
   function tasksFor(id: string): Task[] {
     return allTasks.filter(t => t.use_case_id === id)
   }
@@ -165,6 +198,49 @@ export default async function DashboardPage({
                 <UseCaseCard useCase={uc} tasks={tasksFor(uc.id)} />
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Admin-only: who's opened the dashboard */}
+        {isAdmin && opensByUser.length > 0 && (
+          <div className="mt-12 pt-8 border-t animate-fade-up" style={{ borderColor: '#ECECEC', animationDelay: '200ms' }}>
+            <p className="font-caption text-xs mb-1" style={{ color: '#89837C' }}>Admin only</p>
+            <h2
+              className="text-xl font-bold mb-6"
+              style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}
+            >
+              Dashboard opens <span className="text-sm font-normal" style={{ color: '#89837C' }}>— last 90 days</span>
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: '#ECECEC' }}>
+                    <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>User</th>
+                    <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Email</th>
+                    <th className="text-right font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Visits</th>
+                    <th className="text-right font-caption text-xs pb-2" style={{ color: '#89837C' }}>Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {opensByUser.map(row => (
+                    <tr key={row.user_email} className="border-b" style={{ borderColor: '#F5F0EB' }}>
+                      <td className="py-3 pr-8" style={{ fontFamily: 'Diatype, sans-serif' }}>
+                        {row.user_name ?? '—'}
+                      </td>
+                      <td className="py-3 pr-8 font-caption text-xs" style={{ color: '#767676' }}>
+                        {row.user_email}
+                      </td>
+                      <td className="py-3 pr-8 text-right font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
+                        {row.visits}
+                      </td>
+                      <td className="py-3 text-right font-caption text-xs" style={{ color: '#89837C' }}>
+                        {new Date(row.last_seen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>
