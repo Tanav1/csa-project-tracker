@@ -11,7 +11,8 @@ export interface UserStat {
   name: string
   logins: number
   matches: number    // match_complete — AI successfully filled
-  downloads: number  // fill_complete — user accepted/downloaded
+  downloads: number  // fill_complete distinct sessions — user accepted/downloaded
+  ds_sent: number    // docusign_sent — sent via DocuSign
   last_seen: string
 }
 
@@ -87,7 +88,7 @@ export function FormFillingLive({ stats }: { stats: FormFillingStats }) {
             <div
               className="grid text-xs pb-2 border-b"
               style={{
-                gridTemplateColumns: '1fr 60px 72px 80px 80px',
+                gridTemplateColumns: '1fr 60px 72px 80px 72px 80px',
                 color: '#89837C',
                 borderColor: '#ECECEC',
               }}
@@ -96,6 +97,7 @@ export function FormFillingLive({ stats }: { stats: FormFillingStats }) {
               <span className="text-right">Logins</span>
               <span className="text-right">Fills</span>
               <span className="text-right">Downloads</span>
+              <span className="text-right">DS Sent</span>
               <span className="text-right">Last seen</span>
             </div>
             {stats.users.map((u) => (
@@ -103,7 +105,7 @@ export function FormFillingLive({ stats }: { stats: FormFillingStats }) {
                 key={u.email}
                 className="grid items-center py-2.5 border-b last:border-0"
                 style={{
-                  gridTemplateColumns: '1fr 60px 72px 80px 80px',
+                  gridTemplateColumns: '1fr 60px 72px 80px 72px 80px',
                   borderColor: '#ECECEC',
                 }}
               >
@@ -115,10 +117,7 @@ export function FormFillingLive({ stats }: { stats: FormFillingStats }) {
                     {u.email}
                   </p>
                 </div>
-                <span
-                  className="text-sm text-right"
-                  style={{ color: '#1A1A1A' }}
-                >
+                <span className="text-sm text-right" style={{ color: '#1A1A1A' }}>
                   {u.logins || '—'}
                 </span>
                 <span
@@ -127,16 +126,16 @@ export function FormFillingLive({ stats }: { stats: FormFillingStats }) {
                 >
                   {u.matches || '—'}
                 </span>
-                <span
-                  className="text-sm text-right"
-                  style={{ color: '#1A1A1A' }}
-                >
+                <span className="text-sm text-right" style={{ color: '#1A1A1A' }}>
                   {u.downloads || '—'}
                 </span>
                 <span
-                  className="font-caption text-xs text-right"
-                  style={{ color: '#89837C' }}
+                  className="text-sm font-semibold text-right"
+                  style={{ fontFamily: 'Diatype, sans-serif', color: u.ds_sent > 0 ? '#3B5BDB' : '#89837C' }}
                 >
+                  {u.ds_sent || '—'}
+                </span>
+                <span className="font-caption text-xs text-right" style={{ color: '#89837C' }}>
                   {fmtDate(u.last_seen)}
                 </span>
               </div>

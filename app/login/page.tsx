@@ -45,7 +45,7 @@ function LoginContent() {
 
         <button
           onClick={() => signIn('google', { callbackUrl: '/' })}
-          className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded text-white text-sm font-medium transition-opacity hover:opacity-90"
+          className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded text-white text-sm font-medium transition-opacity hover:opacity-90 cursor-pointer"
           style={{ backgroundColor: '#175242', fontFamily: 'Diatype, sans-serif' }}
         >
           <GoogleIcon />

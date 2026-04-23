@@ -58,14 +58,16 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
     }
   }
 
-  // Per-user stats: logins, matches, downloads, last seen
-  type UserAcc = { name: string; logins: number; matches: number; downloads: number; lastSeen: number }
+  const dsEvents = filtered.filter(e => e.event === 'docusign_sent')
+
+  // Per-user stats: logins, matches, downloads (by distinct session), ds_sent, last seen
+  type UserAcc = { name: string; logins: number; matches: number; downloadSessions: Set<string>; ds_sent: number; lastSeen: number }
   const userAcc: Record<string, UserAcc> = {}
   const ensureUser = (email: string) => {
     if (!userAcc[email]) {
       userAcc[email] = {
         name: emailToName[email] || email.split('@')[0],
-        logins: 0, matches: 0, downloads: 0, lastSeen: 0,
+        logins: 0, matches: 0, downloadSessions: new Set(), ds_sent: 0, lastSeen: 0,
       }
     }
   }
@@ -86,7 +88,14 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
   for (const ev of downloadEvents) {
     if (!ev.user_email) continue
     ensureUser(ev.user_email)
-    userAcc[ev.user_email].downloads++
+    if (ev.session_id) userAcc[ev.user_email].downloadSessions.add(ev.session_id)
+    const t = new Date(ev.ts).getTime()
+    if (t > userAcc[ev.user_email].lastSeen) userAcc[ev.user_email].lastSeen = t
+  }
+  for (const ev of dsEvents) {
+    if (!ev.user_email) continue
+    ensureUser(ev.user_email)
+    userAcc[ev.user_email].ds_sent++
     const t = new Date(ev.ts).getTime()
     if (t > userAcc[ev.user_email].lastSeen) userAcc[ev.user_email].lastSeen = t
   }
@@ -96,7 +105,8 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
       name: u.name,
       logins: u.logins,
       matches: u.matches,
-      downloads: u.downloads,
+      downloads: u.downloadSessions.size,
+      ds_sent: u.ds_sent,
       last_seen: u.lastSeen > 0 ? new Date(u.lastSeen).toISOString() : '',
     }))
     .sort((a, b) => b.matches - a.matches || b.logins - a.logins)

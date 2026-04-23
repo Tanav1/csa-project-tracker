@@ -11,7 +11,7 @@ const ADMIN_EMAIL = 'tanav.thanjavuru@savvywealth.com'
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; priority?: string }>
+  searchParams: Promise<{ status?: string; priority?: string; tab?: string }>
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
@@ -19,6 +19,8 @@ export default async function DashboardPage({
   const filters = await searchParams
   const statusFilter = filters.status ?? 'all'
   const priorityFilter = filters.priority ?? 'all'
+  const isAdmin = session.user.email === ADMIN_EMAIL
+  const activeTab = isAdmin && filters.tab === 'metrics' ? 'metrics' : 'overview'
 
   const supabase = createClient()
 
@@ -44,7 +46,6 @@ export default async function DashboardPage({
     .eq('key', 'total_hrs_per_week')
     .single()
   const totalHrsPerWeek = (settingsRow?.value as number) ?? 0
-  const isAdmin = session.user.email === ADMIN_EMAIL
 
   // Log this visit (non-blocking — don't await result)
   void supabase.from('dashboard_opens').insert({
@@ -174,73 +175,83 @@ export default async function DashboardPage({
           />
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 animate-fade-up" style={{ animationDelay: '100ms' }}>
-          <DashboardFilters currentStatus={statusFilter} currentPriority={priorityFilter} />
-        </div>
+        {/* Overview tab */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Filters */}
+            <div className="mb-6 animate-fade-up" style={{ animationDelay: '100ms' }}>
+              <DashboardFilters currentStatus={statusFilter} currentPriority={priorityFilter} />
+            </div>
 
-        {/* Grid */}
-        {useCases.length === 0 ? (
-          <div
-            className="text-center py-20 font-caption text-xs animate-fade-up"
-            style={{ color: '#89837C', animationDelay: '140ms' }}
-          >
-            No use cases match the selected filters.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {useCases.map((uc, i) => (
+            {/* Grid */}
+            {useCases.length === 0 ? (
               <div
-                key={uc.id}
-                className="animate-fade-up"
-                style={{ animationDelay: `${140 + i * 40}ms` }}
+                className="text-center py-20 font-caption text-xs animate-fade-up"
+                style={{ color: '#89837C', animationDelay: '140ms' }}
               >
-                <UseCaseCard useCase={uc} tasks={tasksFor(uc.id)} />
+                No use cases match the selected filters.
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {useCases.map((uc, i) => (
+                  <div
+                    key={uc.id}
+                    className="animate-fade-up"
+                    style={{ animationDelay: `${140 + i * 40}ms` }}
+                  >
+                    <UseCaseCard useCase={uc} tasks={tasksFor(uc.id)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
-        {/* Admin-only: who's opened the dashboard */}
-        {isAdmin && opensByUser.length > 0 && (
-          <div className="mt-12 pt-8 border-t animate-fade-up" style={{ borderColor: '#ECECEC', animationDelay: '200ms' }}>
-            <p className="font-caption text-xs mb-1" style={{ color: '#89837C' }}>Admin only</p>
+        {/* Metrics tab — admin only */}
+        {activeTab === 'metrics' && isAdmin && (
+          <div className="animate-fade-up" style={{ animationDelay: '100ms' }}>
             <h2
-              className="text-xl font-bold mb-6"
+              className="text-xl font-bold mb-1"
               style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}
             >
-              Dashboard opens <span className="text-sm font-normal" style={{ color: '#89837C' }}>— last 90 days</span>
+              Dashboard opens
             </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: '#ECECEC' }}>
-                    <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>User</th>
-                    <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Email</th>
-                    <th className="text-right font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Visits</th>
-                    <th className="text-right font-caption text-xs pb-2" style={{ color: '#89837C' }}>Last seen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {opensByUser.map(row => (
-                    <tr key={row.user_email} className="border-b" style={{ borderColor: '#F5F0EB' }}>
-                      <td className="py-3 pr-8" style={{ fontFamily: 'Diatype, sans-serif' }}>
-                        {row.user_name ?? '—'}
-                      </td>
-                      <td className="py-3 pr-8 font-caption text-xs" style={{ color: '#767676' }}>
-                        {row.user_email}
-                      </td>
-                      <td className="py-3 pr-8 text-right font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
-                        {row.visits}
-                      </td>
-                      <td className="py-3 text-right font-caption text-xs" style={{ color: '#89837C' }}>
-                        {new Date(row.last_seen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </td>
+            <p className="font-caption text-xs mb-8" style={{ color: '#89837C' }}>Last 90 days — who has viewed this dashboard</p>
+
+            {opensByUser.length === 0 ? (
+              <p className="font-caption text-xs" style={{ color: '#B2AAA1' }}>No visits recorded yet. Check back after others have opened the dashboard.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: '#ECECEC' }}>
+                      <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>User</th>
+                      <th className="text-left font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Email</th>
+                      <th className="text-right font-caption text-xs pb-2 pr-8" style={{ color: '#89837C' }}>Visits</th>
+                      <th className="text-right font-caption text-xs pb-2" style={{ color: '#89837C' }}>Last seen</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {opensByUser.map(row => (
+                      <tr key={row.user_email} className="border-b" style={{ borderColor: '#F5F0EB' }}>
+                        <td className="py-3 pr-8" style={{ fontFamily: 'Diatype, sans-serif' }}>
+                          {row.user_name ?? '—'}
+                        </td>
+                        <td className="py-3 pr-8 font-caption text-xs" style={{ color: '#767676' }}>
+                          {row.user_email}
+                        </td>
+                        <td className="py-3 pr-8 text-right font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>
+                          {row.visits}
+                        </td>
+                        <td className="py-3 text-right font-caption text-xs" style={{ color: '#89837C' }}>
+                          {new Date(row.last_seen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </main>
