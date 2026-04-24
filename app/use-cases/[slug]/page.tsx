@@ -202,46 +202,63 @@ async function fetchRetoolStats(): Promise<RetoolStats> {
     return { active_users: 0, total_time_mins: 0, sessions: 0, status_changes: 0, per_user: [] }
   }
 
-  // Exclude dev/test accounts
-  const EXCLUDED = new Set(['tanav.thanjavuru@savvywealth.com'])
+  // Session detection — matches app.py logic exactly
+  const SESSION_GAP_SECS  = 60 * 60
+  const SESSION_TAIL_MINS = 10
+  const SESSION_MIN_MINS  = 8
 
-  type UserAcc = { status_changes: number; sessions: number; time_spent_mins: number; last_seen: string | null; pendingStart: string | null }
+  type UserAcc = { status_changes: number; sessions: number; time_spent_mins: number; last_seen: string | null }
   const summary: Record<string, UserAcc> = {}
 
-  const ensureUser = (em: string) => {
-    if (!summary[em]) summary[em] = { status_changes: 0, sessions: 0, time_spent_mins: 0, last_seen: null, pendingStart: null }
-  }
-
+  const userEvents: Record<string, typeof data> = {}
   for (const e of data) {
     const em = e.user_email ?? 'unknown'
-    if (EXCLUDED.has(em)) continue
-    ensureUser(em)
-
-    if (e.created_at && (!summary[em].last_seen || e.created_at > summary[em].last_seen!)) {
-      summary[em].last_seen = e.created_at
-    }
-
-    if (e.event_type === 'session_start') {
-      summary[em].pendingStart = e.created_at
-    } else if (e.event_type === 'session_end') {
-      summary[em].sessions++
-      if (summary[em].pendingStart && e.created_at) {
-        const mins = Math.round((new Date(e.created_at).getTime() - new Date(summary[em].pendingStart!).getTime()) / 60000)
-        summary[em].time_spent_mins += Math.max(1, mins)
-        summary[em].pendingStart = null
-      }
-    } else if (e.event_type === 'status_change' || e.event_type === 'status_change_bulk') {
-      summary[em].status_changes++
-    }
+    if (!userEvents[em]) userEvents[em] = []
+    userEvents[em].push(e)
   }
 
-  // Count any sessions still open (no matching session_end yet)
-  for (const u of Object.values(summary)) {
-    if (u.pendingStart) u.sessions++
+  for (const [em, events] of Object.entries(userEvents)) {
+    if (!summary[em]) summary[em] = { status_changes: 0, sessions: 0, time_spent_mins: 0, last_seen: null }
+
+    let sessionStart: Date | null = null
+    let sessionLast: Date | null = null
+
+    for (const e of events) {
+      if (!e.created_at) continue
+      const ts = new Date(e.created_at)
+
+      if (!sessionStart) {
+        sessionStart = ts
+        sessionLast = ts
+      } else {
+        const gap = (ts.getTime() - sessionLast!.getTime()) / 1000
+        if (gap > SESSION_GAP_SECS) {
+          const active = Math.round((sessionLast!.getTime() - sessionStart.getTime()) / 60000)
+          summary[em].time_spent_mins += Math.max(SESSION_MIN_MINS, active + SESSION_TAIL_MINS)
+          summary[em].sessions += 1
+          sessionStart = ts
+        }
+        sessionLast = ts
+      }
+    }
+    if (sessionStart) {
+      const active = Math.round((sessionLast!.getTime() - sessionStart.getTime()) / 60000)
+      summary[em].time_spent_mins += Math.max(SESSION_MIN_MINS, active + SESSION_TAIL_MINS)
+      summary[em].sessions += 1
+    }
+
+    for (const e of events) {
+      if (e.event_type === 'status_change' || e.event_type === 'status_change_bulk') {
+        summary[em].status_changes += 1
+      }
+      if (e.created_at && (!summary[em].last_seen || e.created_at > summary[em].last_seen!)) {
+        summary[em].last_seen = e.created_at
+      }
+    }
   }
 
   const per_user = Object.entries(summary)
-    .map(([email, u]) => ({ email, sessions: u.sessions, time_spent_mins: u.time_spent_mins, status_changes: u.status_changes, last_seen: u.last_seen }))
+    .map(([email, u]) => ({ email, ...u }))
     .sort((a, b) => b.time_spent_mins - a.time_spent_mins)
 
   return {
