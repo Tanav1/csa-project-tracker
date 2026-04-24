@@ -5,6 +5,7 @@ import { UseCaseCard } from '@/components/use-case-card'
 import type { UseCase, Task } from '@/lib/types'
 import { DashboardFilters } from '@/components/dashboard-filters'
 import { EditableMetric } from '@/components/editable-metric'
+import Link from 'next/link'
 
 const ADMIN_EMAIL = 'tanav.thanjavuru@savvywealth.com'
 
@@ -105,6 +106,13 @@ export default async function DashboardPage({
             savvy
           </span>
           <div className="flex items-center gap-4">
+            <Link
+              href="/methodology"
+              className="font-caption text-xs hidden sm:block transition-colors hover:opacity-70"
+              style={{ color: '#89837C' }}
+            >
+              Methodology
+            </Link>
             <span className="font-caption text-xs hidden sm:block" style={{ color: '#89837C' }}>
               {session.user.email}
             </span>
