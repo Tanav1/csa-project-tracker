@@ -195,7 +195,7 @@ async function fetchRetoolStats(): Promise<RetoolStats> {
   const { data } = await client
     .from('usage_events')
     .select('user_email,event_type,created_at')
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(5000)
 
   if (!data || data.length === 0) {
@@ -215,6 +215,10 @@ async function fetchRetoolStats(): Promise<RetoolStats> {
     const em = e.user_email ?? 'unknown'
     if (!userEvents[em]) userEvents[em] = []
     userEvents[em].push(e)
+  }
+  // Sort each user's events ascending (API returns desc)
+  for (const em of Object.keys(userEvents)) {
+    userEvents[em].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
   }
 
   for (const [em, events] of Object.entries(userEvents)) {
