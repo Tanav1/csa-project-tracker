@@ -9,6 +9,7 @@ import { KanbanBoard } from '@/components/kanban-board'
 import { EditUseCaseForm } from '@/components/edit-use-case-form'
 import { FormFillingLive, type FormFillingStats } from '@/components/form-filling-live'
 import { RetoolLive, type RetoolStats } from '@/components/retool-live'
+import { MethodologyTab } from '@/components/methodology-tab'
 import type { UseCase, Task } from '@/lib/types'
 import Link from 'next/link'
 
@@ -283,7 +284,7 @@ export default async function UseCasePage({
   searchParams: Promise<{ tab?: string }>
 }) {
   const [{ slug }, { tab }] = await Promise.all([params, searchParams])
-  const activeTab = tab === 'adoption' ? 'adoption' : 'details'
+  const activeTab = tab === 'adoption' ? 'adoption' : tab === 'methodology' ? 'methodology' : 'details'
 
   const session = await auth()
   if (!session?.user) redirect('/login')
@@ -304,7 +305,8 @@ export default async function UseCasePage({
 
   const isFormFilling = useCase.name === FORM_FILLING_NAME
   const isRetool      = useCase.name === RETOOL_NAME
-  const hasAdoptionTab = isFormFilling || isRetool
+  const hasAdoptionTab    = isFormFilling || isRetool
+  const hasMethodologyTab = isRetool
 
   // Only fetch live data when the adoption tab is active
   const [formFillingStats, retoolStats] = await Promise.all([
@@ -436,6 +438,18 @@ export default async function UseCasePage({
             >
               Project Adoption
             </Link>
+            {hasMethodologyTab && (
+              <Link
+                href={`/use-cases/${slug}?tab=methodology`}
+                className="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+                style={{
+                  borderColor: activeTab === 'methodology' ? '#1A1A1A' : 'transparent',
+                  color: activeTab === 'methodology' ? '#1A1A1A' : '#89837C',
+                }}
+              >
+                Time Savings Methodology
+              </Link>
+            )}
           </div>
         )}
 
@@ -455,6 +469,12 @@ export default async function UseCasePage({
             {formFillingStats && <FormFillingLive stats={formFillingStats} />}
             {retoolStats      && <RetoolLive      stats={retoolStats} />}
           </>
+        )}
+
+        {activeTab === 'methodology' && hasMethodologyTab && (
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#ECECEC' }}>
+            <MethodologyTab />
+          </div>
         )}
       </main>
     </div>
