@@ -25,6 +25,7 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
     .from('analytics_events')
     .select('event, user_email, session_id, ts, props, form_title, folder')
     .gte('ts', thirtyDaysAgo)
+    .order('ts', { ascending: false })
     .limit(10000)
 
   if (!events) return {
@@ -180,7 +181,7 @@ async function fetchFormFillingStats(): Promise<FormFillingStats> {
     active_users_7d: activeUserSet.size,
     forms_opened_30d: openEvents.length,
     forms_matched_30d: matchEvents.length,
-    forms_downloaded_30d: downloadEvents.length,
+    forms_downloaded_30d: new Set(downloadEvents.map(e => e.session_id).filter(Boolean)).size,
     fill_rate: openEvents.length > 0 ? Math.round((matchEvents.length / openEvents.length) * 100) : 0,
     dropoff_rate,
     avg_fill_time_min,
