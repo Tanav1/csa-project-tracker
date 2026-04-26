@@ -1,204 +1,297 @@
 export function MethodologyTab() {
   return (
     <div>
-      {/* Intro */}
-      <div className="mb-8 pb-6 border-b" style={{ borderColor: '#ECECEC' }}>
-        <p className="text-sm leading-relaxed max-w-2xl" style={{ color: '#767676' }}>
-          Two of the three inputs below are derived from live task and usage data, not assumed. The third (follow-up emails) is an estimate and is labeled as such. All arithmetic is shown so any input can be challenged directly.
-        </p>
+
+      {/* Summary row */}
+      <div
+        className="grid grid-cols-3 gap-0 mb-10 pb-8 border-b"
+        style={{ borderColor: '#ECECEC' }}
+      >
+        <SummaryCol id="A1" label="DocuSign tracking" value="39" source="database" />
+        <SummaryCol id="A2" label="Task re-orients" value="44" source="database" highlight />
+        <SummaryCol id="A3" label="Follow-up emails" value="20" source="estimate" />
       </div>
 
-      {/* Assumptions */}
-      <div className="space-y-0">
-        <Assumption
+      {/* Assumption blocks */}
+      <div className="space-y-10">
+
+        <AssumptionBlock
           id="A1"
           label="DocuSign status tracking"
           source="database"
-          sourceNote="215 open DocuSign-flagged tasks across 16 CSAs in task_internal as of today"
-          assumption="A CSA carries an average of 13 active tasks with a pending DocuSign envelope at any given time (215 divided by 16 CSAs). Each envelope requires periodic status checks. Without the tool, a check means opening DocuSign separately, finding the client, and reading the status — roughly 90 seconds per check if DocuSign is already open. The tool eliminates manual checks entirely via webhook-driven auto-advancement."
-          formula="13 envelopes x 2 checks/week x 90 sec/check = 39 min/week saved"
-          sensitivity="The 2 checks/week assumption drives this number. At 1 check/week: 19 min/week. At 3 checks/week: 58 min/week. The envelope count (13) is a measured fact."
+          sourceDetail="215 open DocuSign-flagged tasks / 16 CSAs in task_internal"
+          inputs={[
+            { variable: 'Active DocuSign tasks per CSA', value: '13', source: 'measured', note: '215 tasks / 16 CSAs' },
+            { variable: 'Manual checks per envelope per week', value: '2x', source: 'assumed' },
+            { variable: 'Time per manual check', value: '90 sec', source: 'assumed', note: 'DocuSign already open in a tab' },
+          ]}
+          formula="13 x 2 x 1.5 min x 5 days"
+          result="39 min/week"
+          sensitivity={[
+            { label: '1 check/week', value: '19 min/week' },
+            { label: '3 checks/week', value: '58 min/week' },
+          ]}
+          sensitivityNote="Envelope count (13) is measured. Check frequency is the only free variable."
         />
-        <Assumption
+
+        <AssumptionBlock
           id="A2"
           label="Task re-orients"
           source="database"
-          sourceNote="Active users recorded 2-15 status changes per day in usage_events over the last 30 days. Status changes are a lower bound on re-orients — CSAs also check the board without updating status."
-          assumption="Active users of the tool made 2-15 status changes per day over the last 30 days. Each status change implies a deliberate check-in: open the tool, find the task, assess it, update it. Without the tool this same check-in went through the CSA portal. We use 5 check-ins per day as a conservative floor, consistent with median active-user behavior. The tool reduces each from roughly 2 minutes (portal navigation) to 15 seconds (Kanban scan)."
-          formula="5 check-ins/day x 1.75 min saved x 5 days = 44 min/week saved"
-          sensitivity="This is the most contested input. At 3 check-ins/day: 26 min/week. At 10/day: 88 min/week. The usage_events data gives a measured floor — the real number could be higher since many re-orients happen without a status change."
+          sourceDetail="usage_events: active users made 2-15 status changes/day over the last 30 days"
+          inputs={[
+            { variable: 'Check-ins per day (floor)', value: '5', source: 'assumed', note: 'Consistent with median active-user status changes; understates true re-orients' },
+            { variable: 'Time per re-orient without tool', value: '2 min', source: 'assumed', note: 'CSA portal navigation to find and assess a task' },
+            { variable: 'Time per re-orient with tool', value: '15 sec', source: 'assumed', note: 'Kanban scan' },
+          ]}
+          formula="5 x 1.75 min saved x 5 days"
+          result="44 min/week"
           highlight
+          sensitivity={[
+            { label: '3 check-ins/day', value: '26 min/week' },
+            { label: '10 check-ins/day', value: '88 min/week' },
+          ]}
+          sensitivityNote="Largest input. Status changes in usage_events are a lower bound — re-orients without a status update are not captured."
         />
-        <Assumption
+
+        <AssumptionBlock
           id="A3"
           label="Envelope follow-up emails"
           source="estimate"
-          sourceNote="No measurement available. Based on judgment about how often a stale envelope prompts a manual follow-up."
-          assumption="Once per day, a stale envelope prompts a CSA to send a follow-up to the client. Without the tool this requires logging into DocuSign, locating the envelope, and composing or resending — roughly 5 minutes. The tool enables a one-click resend or in-app custom email in under 1 minute."
-          formula="1 follow-up/day x 4 min saved x 5 days = 20 min/week saved"
-          sensitivity="If 0.5 follow-ups/day: 10 min/week. If 2/day: 40 min/week. This is the only unmeasured input."
+          sourceDetail="No measurement available"
+          inputs={[
+            { variable: 'Follow-ups sent per day', value: '1', source: 'assumed' },
+            { variable: 'Time per follow-up without tool', value: '5 min', source: 'assumed', note: 'DocuSign login + locate envelope + compose or resend' },
+            { variable: 'Time per follow-up with tool', value: '1 min', source: 'assumed', note: 'In-app send or one-click resend' },
+          ]}
+          formula="1 x 4 min saved x 5 days"
+          result="20 min/week"
+          sensitivity={[
+            { label: '0.5 follow-ups/day', value: '10 min/week' },
+            { label: '2 follow-ups/day', value: '40 min/week' },
+          ]}
+          sensitivityNote="Smallest input and only fully unanchored assumption."
         />
       </div>
 
       {/* Total */}
-      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#ECECEC' }}>
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-8">
+      <div className="mt-10 pt-8 border-t" style={{ borderColor: '#ECECEC' }}>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-8">
           <div>
-            <p className="font-caption text-xs mb-1" style={{ color: '#89837C' }}>
-              Total at stated assumptions (A1 + A2 + A3)
+            <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>
+              Total — A1 + A2 + A3
             </p>
             <p
-              className="text-3xl font-bold"
-              style={{ fontFamily: 'Diatype, sans-serif', letterSpacing: '-0.03em' }}
+              className="font-bold leading-none mb-1"
+              style={{ fontFamily: 'Diatype, sans-serif', fontSize: '2.25rem', letterSpacing: '-0.03em' }}
             >
               103 min/week
             </p>
-            <p className="font-caption text-xs mt-1" style={{ color: '#89837C' }}>
-              approximately 1.7 hours -- before Slack integrations
-            </p>
-            <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>
-              A1 and A2 are grounded in live data. A3 is an estimate.
-            </p>
+            <p className="font-caption text-xs" style={{ color: '#89837C' }}>1.7 hrs — before Slack integrations</p>
           </div>
+
           <div className="shrink-0">
-            <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>Plausible range</p>
-            <div className="space-y-1.5">
-              <RangeRow label="Low (conservative inputs)" value="55 min/week -- 0.9 hrs" />
-              <RangeRow label="Stated assumptions" value="103 min/week -- 1.7 hrs" active />
-              <RangeRow label="High (active users, full adoption)" value="206 min/week -- 3.4 hrs" />
-            </div>
+            <table className="text-xs border-collapse">
+              <thead>
+                <tr>
+                  <th className="font-caption text-left pb-1.5 pr-8" style={{ color: '#B2AAA1', fontWeight: 400 }}>Scenario</th>
+                  <th className="font-caption text-right pb-1.5 pr-8" style={{ color: '#B2AAA1', fontWeight: 400 }}>Min/week</th>
+                  <th className="font-caption text-right pb-1.5" style={{ color: '#B2AAA1', fontWeight: 400 }}>Hrs/week</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: 'Low (conservative inputs)', mins: 55, active: false },
+                  { label: 'Stated assumptions', mins: 103, active: true },
+                  { label: 'High (full adoption)', mins: 206, active: false },
+                ].map(row => (
+                  <tr key={row.label}>
+                    <td
+                      className="py-1 pr-8"
+                      style={{ color: row.active ? '#1A1A1A' : '#B2AAA1', fontWeight: row.active ? 600 : 400 }}
+                    >
+                      {row.label}
+                    </td>
+                    <td
+                      className="py-1 pr-8 text-right font-bold"
+                      style={{ fontFamily: 'Diatype, sans-serif', color: row.active ? '#175242' : '#B2AAA1' }}
+                    >
+                      {row.mins}
+                    </td>
+                    <td
+                      className="py-1 text-right"
+                      style={{ color: row.active ? '#175242' : '#B2AAA1', fontWeight: row.active ? 600 : 400 }}
+                    >
+                      {(row.mins / 60).toFixed(1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      {/* What would move this number */}
-      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#ECECEC' }}>
-        <p className="font-caption text-xs font-bold mb-3" style={{ color: '#4A4440' }}>
-          What would move this number most
-        </p>
-        <div className="space-y-2">
-          {[
-            'A2 is the largest driver and the only one with an unresolved assumption (how often do CSAs re-orient without changing status). One CSA tracking this for a week would resolve it.',
-            'The 2 checks/week assumption in A1 is the only non-measured input in that calculation. If CSAs check DocuSign status daily per envelope rather than twice weekly, A1 doubles.',
-            'Adoption depth matters more than adoption breadth. One CSA using the tool as their primary interface saves more than five CSAs using it occasionally.',
-          ].map((text, i) => (
-            <div key={i} className="flex gap-3">
-              <span
-                className="font-caption shrink-0 w-5 h-5 rounded-full flex items-center justify-center font-bold mt-0.5"
-                style={{ backgroundColor: '#ECECEC', color: '#767676', fontSize: '10px' }}
-              >
-                {i + 1}
-              </span>
-              <p className="text-xs leading-relaxed" style={{ color: '#4A4440' }}>{text}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
 
 /* ── Sub-components ──────────────────────────────────────────────────── */
 
-function Assumption({
-  id,
-  label,
-  source,
-  sourceNote,
-  assumption,
-  formula,
-  sensitivity,
-  highlight = false,
+function SummaryCol({
+  id, label, value, source, highlight = false,
 }: {
-  id: string
-  label: string
-  source: 'database' | 'estimate'
-  sourceNote: string
-  assumption: string
-  formula: string
-  sensitivity: string
-  highlight?: boolean
+  id: string; label: string; value: string; source: 'database' | 'estimate'; highlight?: boolean
 }) {
   const isDB = source === 'database'
   return (
-    <div className="py-6 border-b" style={{ borderColor: '#ECECEC' }}>
-      <div className="flex items-start gap-4">
+    <div
+      className="px-5 py-4 border-r last:border-r-0 first:pl-0 last:pr-0"
+      style={{ borderColor: '#ECECEC' }}
+    >
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="font-caption text-xs" style={{ color: '#C8C2BB' }}>{id}</span>
         <span
-          className="font-caption text-xs shrink-0 mt-0.5 w-7"
-          style={{ color: '#C8C2BB', letterSpacing: '0.05em' }}
+          className="font-caption px-1.5 py-0.5 rounded"
+          style={{ fontSize: '10px', backgroundColor: isDB ? '#EEF6FA' : '#F5F2EC', color: isDB ? '#095972' : '#89837C' }}
         >
-          {id}
+          {isDB ? 'measured' : 'estimate'}
         </span>
-        <div className="flex-1 min-w-0">
-          {/* Label + source badge */}
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <h3
-              className="text-sm font-bold"
-              style={{ fontFamily: 'Diatype, sans-serif', color: '#1A1A1A' }}
-            >
-              {label}
-            </h3>
-            <span
-              className="font-caption px-1.5 py-0.5 rounded"
-              style={{
-                fontSize: '10px',
-                backgroundColor: isDB ? '#EEF6FA' : '#F5F2EC',
-                color: isDB ? '#095972' : '#89837C',
-              }}
-            >
-              {isDB ? 'from database' : 'estimate'}
-            </span>
-            {highlight && (
-              <span
-                className="font-caption px-1.5 py-0.5 rounded"
-                style={{ fontSize: '10px', backgroundColor: '#175242', color: '#FFFFFF' }}
-              >
-                largest input
-              </span>
-            )}
-          </div>
-          {/* Source note */}
-          <p className="font-caption text-xs mb-3 italic" style={{ color: '#B2AAA1' }}>
-            {sourceNote}
-          </p>
-          {/* Assumption body */}
-          <p className="text-sm leading-relaxed mb-4" style={{ color: '#4A4440' }}>
-            {assumption}
-          </p>
-          {/* Math + sensitivity */}
-          <div className="flex flex-wrap gap-x-8 gap-y-3">
-            <div>
-              <p className="font-caption text-xs mb-0.5" style={{ color: '#B2AAA1' }}>Math</p>
-              <p
-                className="text-xs font-bold"
-                style={{ fontFamily: 'Diatype, sans-serif', color: '#1A1A1A' }}
-              >
-                {formula}
-              </p>
-            </div>
-            <div className="flex-1 min-w-48">
-              <p className="font-caption text-xs mb-0.5" style={{ color: '#B2AAA1' }}>Sensitivity</p>
-              <p className="text-xs leading-relaxed" style={{ color: '#767676' }}>{sensitivity}</p>
-            </div>
-          </div>
-        </div>
       </div>
+      <p
+        className="font-bold leading-none mb-1"
+        style={{ fontFamily: 'Diatype, sans-serif', fontSize: '1.75rem', letterSpacing: '-0.03em', color: highlight ? '#175242' : '#1A1A1A' }}
+      >
+        {value}
+        <span className="text-sm font-normal ml-1" style={{ color: '#89837C', fontFamily: 'inherit' }}>min/wk</span>
+      </p>
+      <p className="font-caption text-xs" style={{ color: '#89837C' }}>{label}</p>
     </div>
   )
 }
 
-function RangeRow({ label, value, active = false }: { label: string; value: string; active?: boolean }) {
+function AssumptionBlock({
+  id, label, source, sourceDetail, inputs, formula, result, sensitivity, sensitivityNote, highlight = false,
+}: {
+  id: string
+  label: string
+  source: 'database' | 'estimate'
+  sourceDetail: string
+  inputs: { variable: string; value: string; source: 'measured' | 'assumed'; note?: string }[]
+  formula: string
+  result: string
+  sensitivity: { label: string; value: string }[]
+  sensitivityNote: string
+  highlight?: boolean
+}) {
+  const isDB = source === 'database'
   return (
-    <div className="flex items-center justify-between gap-6">
-      <span className="font-caption text-xs" style={{ color: active ? '#1A1A1A' : '#B2AAA1' }}>
-        {label}
-      </span>
-      <span
-        className="font-caption text-xs font-bold shrink-0"
-        style={{ color: active ? '#175242' : '#B2AAA1' }}
-      >
-        {value}
-      </span>
+    <div>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-caption text-xs w-7 shrink-0" style={{ color: '#C8C2BB' }}>{id}</span>
+        <h3 className="text-sm font-bold" style={{ fontFamily: 'Diatype, sans-serif', color: '#1A1A1A' }}>
+          {label}
+        </h3>
+        <span
+          className="font-caption px-1.5 py-0.5 rounded"
+          style={{ fontSize: '10px', backgroundColor: isDB ? '#EEF6FA' : '#F5F2EC', color: isDB ? '#095972' : '#89837C' }}
+        >
+          {isDB ? 'from database' : 'estimate'}
+        </span>
+        {highlight && (
+          <span
+            className="font-caption px-1.5 py-0.5 rounded"
+            style={{ fontSize: '10px', backgroundColor: '#175242', color: '#FFFFFF' }}
+          >
+            largest input
+          </span>
+        )}
+      </div>
+      <div className="flex items-start gap-2 mb-4">
+        <span className="w-7 shrink-0" />
+        <p className="font-caption text-xs italic" style={{ color: '#B2AAA1' }}>{sourceDetail}</p>
+      </div>
+
+      <div className="flex items-start gap-2">
+        <span className="w-7 shrink-0" />
+        <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* Inputs table */}
+          <div className="lg:col-span-2">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b" style={{ borderColor: '#ECECEC' }}>
+                  <th className="font-caption text-left pb-1.5 pr-4" style={{ color: '#B2AAA1', fontWeight: 400 }}>Input</th>
+                  <th className="font-caption text-right pb-1.5 pr-4" style={{ color: '#B2AAA1', fontWeight: 400 }}>Value</th>
+                  <th className="font-caption text-left pb-1.5" style={{ color: '#B2AAA1', fontWeight: 400 }}>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inputs.map((inp, i) => (
+                  <tr key={i} className="border-b" style={{ borderColor: '#F5F0EB' }}>
+                    <td className="py-2 pr-4" style={{ color: '#4A4440' }}>
+                      {inp.variable}
+                      {inp.note && (
+                        <span className="block font-caption" style={{ color: '#B2AAA1', fontSize: '10px' }}>{inp.note}</span>
+                      )}
+                    </td>
+                    <td
+                      className="py-2 pr-4 text-right font-bold align-top"
+                      style={{ fontFamily: 'Diatype, sans-serif', color: '#1A1A1A', whiteSpace: 'nowrap' }}
+                    >
+                      {inp.value}
+                    </td>
+                    <td className="py-2 align-top">
+                      <span
+                        className="font-caption px-1.5 py-0.5 rounded"
+                        style={{
+                          fontSize: '10px',
+                          backgroundColor: inp.source === 'measured' ? '#EEF6FA' : '#F5F2EC',
+                          color: inp.source === 'measured' ? '#095972' : '#89837C',
+                        }}
+                      >
+                        {inp.source}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="pt-3 pr-4 font-caption text-xs" style={{ color: '#89837C' }}>
+                    {formula} =
+                  </td>
+                  <td
+                    className="pt-3 pr-4 text-right font-bold"
+                    style={{ fontFamily: 'Diatype, sans-serif', color: highlight ? '#175242' : '#1A1A1A', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+                  >
+                    {result}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Sensitivity */}
+          <div>
+            <p className="font-caption text-xs mb-2" style={{ color: '#B2AAA1' }}>Sensitivity</p>
+            <div className="space-y-1 mb-2">
+              {sensitivity.map((row, i) => (
+                <div key={i} className="flex justify-between gap-4">
+                  <span className="font-caption text-xs" style={{ color: '#89837C' }}>{row.label}</span>
+                  <span className="font-caption text-xs font-bold" style={{ fontFamily: 'Diatype, sans-serif', color: '#4A4440' }}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+            <p className="font-caption text-xs leading-relaxed" style={{ color: '#B2AAA1', fontSize: '10px' }}>
+              {sensitivityNote}
+            </p>
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }
