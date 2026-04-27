@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 import { UseCaseCard } from '@/components/use-case-card'
 import type { UseCase, Task } from '@/lib/types'
 import { DashboardFilters } from '@/components/dashboard-filters'
-import { EditableMetric } from '@/components/editable-metric'
 
 const ADMIN_EMAIL = 'tanav.thanjavuru@savvywealth.com'
 
@@ -40,12 +39,24 @@ export default async function DashboardPage({
   const allUseCases = (rawAll ?? []) as UseCase[]
   const activeCount = allUseCases.filter(u => u.status === 'In Progress').length
 
-  const { data: settingsRow } = await supabase
-    .from('dashboard_settings')
-    .select('value')
-    .eq('key', 'total_hrs_per_week')
-    .single()
-  const totalHrsPerWeek = (settingsRow?.value as number) ?? 0
+  // Tasks for ALL use cases (unfiltered) — needed for aggregate metrics
+  const allIds = allUseCases.map(u => u.id)
+  const { data: rawAllTasks } = allIds.length > 0
+    ? await supabase.from('tasks').select('*').in('use_case_id', allIds)
+    : { data: [] }
+  const allUseCaseTasks = (rawAllTasks ?? []) as Task[]
+
+  function allTasksFor(id: string): Task[] {
+    return allUseCaseTasks.filter(t => t.use_case_id === id)
+  }
+
+  const potentialHrs = allUseCases.reduce((s, u) => s + (u.hours_per_week ?? 0), 0)
+  const realizedHrs  = allUseCases.reduce((s, u) => {
+    const pct = allUseCaseTasks.length > 0
+      ? (() => { const t = allTasksFor(u.id); return t.length === 0 ? 0 : Math.round(t.reduce((a, b) => a + b.percent_complete, 0) / t.length) })()
+      : 0
+    return s + (u.hours_per_week ?? 0) * (pct / 100)
+  }, 0)
 
   // Log this visit (non-blocking — don't await result)
   void supabase.from('dashboard_opens').insert({
@@ -89,9 +100,6 @@ export default async function DashboardPage({
     return Math.round(tasks.reduce((s, t) => s + t.percent_complete, 0) / tasks.length)
   }
 
-  const effectiveHrs = useCases.reduce((s, u) => {
-    return s + (u.hours_per_week ?? 0) * (calcPercent(tasksFor(u.id)) / 100)
-  }, 0)
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#FFF8F1' }}>
@@ -138,41 +146,41 @@ export default async function DashboardPage({
           </h1>
         </div>
 
-        {/* Metrics strip — editorial, no boxes */}
+        {/* Metrics — two rows: potential and realized */}
         <div
-          className="flex flex-wrap items-start gap-0 mb-8 pb-8 border-b animate-fade-up"
+          className="mb-8 pb-8 border-b animate-fade-up"
           style={{ borderColor: '#ECECEC', animationDelay: '60ms' }}
         >
-          <EditableMetric
-            label="Total hrs/wk saved"
-            value={totalHrsPerWeek}
-            unit="hrs"
-            definition="Manually set headline figure for total hours per week saved across all automation use cases. Click to edit (admin only)."
-            settingsKey="total_hrs_per_week"
-            canEdit={isAdmin}
-          />
-          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
-          <MetricStrip
-            label="Effective hrs/wk"
-            value={fmtNum(effectiveHrs)}
-            unit="hrs"
-            sub="weighted by completion"
-            definition="Total hrs/wk saved across all use cases, weighted by each project's completion percentage. Reflects hours actually being saved right now vs. the full potential once everything ships."
-          />
-          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
-          <MetricStrip
-            label="Use cases"
-            value={String(allUseCases.length)}
-            unit="total"
-            definition="Total number of automation use cases tracked in the dashboard, across all statuses and priorities."
-          />
-          <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
-          <MetricStrip
-            label="Active"
-            value={String(activeCount)}
-            unit="in progress"
-            definition="Use cases currently in the 'In Progress' state — actively being built or deployed."
-          />
+          {/* Row 1: Potential (at full completion) */}
+          <div className="mb-1">
+            <p className="font-caption text-xs mb-3" style={{ color: '#B2AAA1' }}>Potential — at full completion</p>
+            <div className="flex flex-wrap items-start gap-0">
+              <MetricStrip label="hrs / week" value={fmtNum(potentialHrs)} />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="hrs / quarter" value={fmtNum(potentialHrs * 13)} />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="hrs / year" value={fmtNum(potentialHrs * 52)} />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="use cases" value={String(allUseCases.length)} small />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="in progress" value={String(activeCount)} small />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 border-t" style={{ borderColor: '#F5F0EB' }} />
+
+          {/* Row 2: Realized today (weighted by completion) */}
+          <div>
+            <p className="font-caption text-xs mb-3" style={{ color: '#B2AAA1' }}>Realized today — weighted by completion</p>
+            <div className="flex flex-wrap items-start gap-0">
+              <MetricStrip label="hrs / week" value={fmtNum(realizedHrs)} accent />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="hrs / quarter" value={fmtNum(realizedHrs * 13)} accent />
+              <div className="w-px self-stretch mx-8 hidden sm:block" style={{ backgroundColor: '#ECECEC' }} />
+              <MetricStrip label="hrs / year" value={fmtNum(realizedHrs * 52)} accent />
+            </div>
+          </div>
         </div>
 
         {/* Overview tab */}
@@ -267,53 +275,28 @@ function fmtNum(n: number): string {
 function MetricStrip({
   label,
   value,
-  unit,
-  sub,
-  definition,
+  accent = false,
+  small = false,
 }: {
   label: string
   value: string
-  unit: string
-  sub?: string
-  definition?: string
+  accent?: boolean
+  small?: boolean
 }) {
   return (
     <div className="py-1">
-      <div className="flex items-center gap-1 mb-2">
-        <p className="font-caption text-xs" style={{ color: '#89837C' }}>{label}</p>
-        {definition && (
-          <div className="relative group/tip">
-            <span
-              className="font-caption text-xs leading-none cursor-default select-none"
-              style={{ color: '#C8C2BB' }}
-            >
-              ?
-            </span>
-            <div
-              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-xs leading-snug opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity duration-150 z-20"
-              style={{ backgroundColor: '#1A1A1A', color: '#F5F2EC' }}
-            >
-              {definition}
-              <div
-                className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"
-                style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1A1A1A' }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="flex items-baseline gap-1.5">
-        <span
-          className="font-bold leading-none"
-          style={{ fontFamily: 'Diatype, sans-serif', fontSize: '2.5rem', letterSpacing: '-0.03em' }}
-        >
-          {value}
-        </span>
-        <span className="text-sm" style={{ color: '#767676' }}>{unit}</span>
-      </div>
-      {sub && (
-        <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>{sub}</p>
-      )}
+      <p className="font-caption text-xs mb-2" style={{ color: '#89837C' }}>{label}</p>
+      <span
+        className="font-bold leading-none"
+        style={{
+          fontFamily: 'Diatype, sans-serif',
+          fontSize: small ? '1.5rem' : '2.5rem',
+          letterSpacing: '-0.03em',
+          color: accent ? '#175242' : '#1A1A1A',
+        }}
+      >
+        {value}
+      </span>
     </div>
   )
 }

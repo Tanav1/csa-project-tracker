@@ -174,29 +174,29 @@ export function EditUseCaseForm({ useCase }: { useCase: UseCase }) {
                   METRICS
                 </p>
                 <div className="grid grid-cols-2 gap-3">
-                  <F label="Hrs / week saved">
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.1}
-                      value={form.hours_per_week}
-                      onChange={e => setForm(f => ({ ...f, hours_per_week: e.target.value }))}
-                      className={ic}
-                      style={is}
-                    />
-                  </F>
-
-                  <F label="Hrs / quarter saved">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={form.hours_per_quarter}
-                      onChange={e => setForm(f => ({ ...f, hours_per_quarter: e.target.value }))}
-                      className={ic}
-                      style={is}
-                    />
-                  </F>
+                  <div className="col-span-2">
+                    <F label="Hrs / week saved (at full completion)">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={form.hours_per_week}
+                        onChange={e => setForm(f => ({ ...f, hours_per_week: e.target.value }))}
+                        className={ic}
+                        style={is}
+                      />
+                    </F>
+                    {(() => {
+                      const wk = parseFloat(form.hours_per_week) || 0
+                      const qtr = Math.round(wk * 13 * 10) / 10
+                      const yr  = Math.round(wk * 52 * 10) / 10
+                      return wk > 0 ? (
+                        <p className="font-caption text-xs mt-1.5" style={{ color: '#B2AAA1' }}>
+                          = {qtr} hrs/qtr &nbsp;&middot;&nbsp; {yr} hrs/yr
+                        </p>
+                      ) : null
+                    })()}
+                  </div>
 
                   <F label="Build hours">
                     <input
