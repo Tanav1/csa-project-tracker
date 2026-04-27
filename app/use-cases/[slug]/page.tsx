@@ -381,8 +381,8 @@ export default async function UseCasePage({
             className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5 border-t"
             style={{ borderColor: '#ECECEC' }}
           >
-            <Metric label="hrs/wk saved" value={fmtNum(useCase.hours_per_week)} />
-            <Metric label="hrs/qtr saved" value={fmtNum(useCase.hours_per_quarter)} />
+            <Metric label="when complete" value={fmtNum(useCase.hours_per_week)} unit="hrs/wk" />
+            <Metric label="realized today" value={fmtNum(useCase.realized_hours_per_week ?? 0)} unit="hrs/wk" accent />
             <Metric label="build hrs" value={fmtNum(useCase.build_hours)} />
             <Metric label="ROI" value={useCase.roi != null ? `${useCase.roi}x` : '—'} />
           </div>
@@ -486,11 +486,19 @@ function fmtNum(n: number | null | undefined): string {
   return n % 1 === 0 ? String(n) : n.toFixed(1)
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, unit, accent = false }: { label: string; value: string; unit?: string; accent?: boolean }) {
   return (
     <div>
       <p className="font-caption text-xs mb-0.5" style={{ color: '#89837C' }}>{label}</p>
-      <p className="text-xl font-bold" style={{ fontFamily: 'Diatype, sans-serif' }}>{value}</p>
+      <div className="flex items-baseline gap-1">
+        <p
+          className="text-xl font-bold"
+          style={{ fontFamily: 'Diatype, sans-serif', color: accent ? '#175242' : '#1A1A1A' }}
+        >
+          {value}
+        </p>
+        {unit && <span className="text-xs" style={{ color: '#B2AAA1' }}>{unit}</span>}
+      </div>
     </div>
   )
 }

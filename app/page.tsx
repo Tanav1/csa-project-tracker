@@ -144,7 +144,7 @@ export default async function DashboardPage({
           style={{ borderColor: '#ECECEC', animationDelay: '60ms' }}
         >
           <EditableMetric
-            label="Total hrs/wk saved"
+            label="Realized total hrs/wk saved"
             value={totalHrsPerWeek}
             unit="hrs"
             definition="Manually set headline figure for total hours per week saved across all automation use cases. Click to edit (admin only)."

@@ -14,6 +14,7 @@ export function EditUseCaseForm({ useCase }: { useCase: UseCase }) {
     priority: useCase.priority as Priority,
     status: useCase.status as UseCaseStatus,
     hours_per_week: String(useCase.hours_per_week),
+    realized_hours_per_week: String(useCase.realized_hours_per_week ?? ''),
     hours_per_quarter: String(useCase.hours_per_quarter),
     build_hours: String(useCase.build_hours),
     roi: useCase.roi != null ? String(useCase.roi) : '',
@@ -32,6 +33,7 @@ export function EditUseCaseForm({ useCase }: { useCase: UseCase }) {
       priority: useCase.priority,
       status: useCase.status,
       hours_per_week: String(useCase.hours_per_week),
+      realized_hours_per_week: String(useCase.realized_hours_per_week ?? ''),
       hours_per_quarter: String(useCase.hours_per_quarter),
       build_hours: String(useCase.build_hours),
       roi: useCase.roi != null ? String(useCase.roi) : '',
@@ -53,6 +55,7 @@ export function EditUseCaseForm({ useCase }: { useCase: UseCase }) {
         priority: form.priority,
         status: form.status,
         hours_per_week: parseFloat(form.hours_per_week) || 0,
+        realized_hours_per_week: form.realized_hours_per_week !== '' ? parseFloat(form.realized_hours_per_week) : null,
         hours_per_quarter: parseFloat(form.hours_per_quarter) || 0,
         build_hours: parseFloat(form.build_hours) || 0,
         roi: form.roi !== '' ? parseFloat(form.roi) : null,
@@ -174,13 +177,26 @@ export function EditUseCaseForm({ useCase }: { useCase: UseCase }) {
                   METRICS
                 </p>
                 <div className="grid grid-cols-2 gap-3">
-                  <F label="Hrs / week saved">
+                  <F label="When complete (hrs/wk)">
                     <input
                       type="number"
                       min={0}
                       step={0.1}
                       value={form.hours_per_week}
                       onChange={e => setForm(f => ({ ...f, hours_per_week: e.target.value }))}
+                      className={ic}
+                      style={is}
+                    />
+                  </F>
+
+                  <F label="Realized today (hrs/wk)">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={form.realized_hours_per_week}
+                      onChange={e => setForm(f => ({ ...f, realized_hours_per_week: e.target.value }))}
+                      placeholder="0"
                       className={ic}
                       style={is}
                     />

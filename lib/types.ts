@@ -10,6 +10,7 @@ export interface UseCase {
   priority: Priority
   status: UseCaseStatus
   hours_per_week: number
+  realized_hours_per_week: number | null
   hours_per_quarter: number
   build_hours: number
   roi: number | null

@@ -53,19 +53,34 @@ export function UseCaseCard({ useCase, tasks }: { useCase: UseCase; tasks: Task[
           {useCase.name}
         </h3>
 
-        {/* Metric */}
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className="font-bold leading-none"
-            style={{
-              fontFamily: 'Diatype, sans-serif',
-              fontSize: '1.75rem',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {fmtNum(useCase.hours_per_week)}
-          </span>
-          <span className="text-xs" style={{ color: '#767676' }}>hrs/wk saved</span>
+        {/* Metrics */}
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="font-caption text-xs mb-0.5" style={{ color: '#B2AAA1' }}>when complete</p>
+            <div className="flex items-baseline gap-1">
+              <span
+                className="font-bold leading-none"
+                style={{ fontFamily: 'Diatype, sans-serif', fontSize: '1.75rem', letterSpacing: '-0.02em' }}
+              >
+                {fmtNum(useCase.hours_per_week)}
+              </span>
+              <span className="text-xs" style={{ color: '#767676' }}>hrs/wk</span>
+            </div>
+          </div>
+          {(useCase.realized_hours_per_week ?? 0) > 0 && (
+            <div className="text-right">
+              <p className="font-caption text-xs mb-0.5" style={{ color: '#B2AAA1' }}>realized today</p>
+              <div className="flex items-baseline gap-1 justify-end">
+                <span
+                  className="font-bold leading-none"
+                  style={{ fontFamily: 'Diatype, sans-serif', fontSize: '1.25rem', letterSpacing: '-0.02em', color: '#175242' }}
+                >
+                  {fmtNum(useCase.realized_hours_per_week ?? 0)}
+                </span>
+                <span className="text-xs" style={{ color: '#B2AAA1' }}>hrs/wk</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
