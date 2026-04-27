@@ -47,8 +47,7 @@ export default async function DashboardPage({
     .single()
   const totalHrsPerWeek = (settingsRow?.value as number) ?? 0
 
-  // Log this visit (non-blocking — don't await result)
-  void supabase.from('dashboard_opens').insert({
+  await supabase.from('dashboard_opens').insert({
     user_email: session.user.email ?? '',
     user_name: session.user.name ?? null,
   })
