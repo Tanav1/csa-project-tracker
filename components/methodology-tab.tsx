@@ -21,15 +21,6 @@ export function MethodologyTab() {
         highlight
       />
 
-      <Row
-        mins={20}
-        label="Envelope follow-up emails"
-        arithmetic="1 follow-up/day × 4 min saved × 5 days"
-        context="Assumed — no usage data available for this"
-        low="10 min at 0.5/day"
-        high="40 min at 2/day"
-      />
-
       {/* Total */}
       <div className="pt-8 mt-2 border-t" style={{ borderColor: '#ECECEC' }}>
         <div className="flex items-baseline gap-3">
@@ -37,12 +28,12 @@ export function MethodologyTab() {
             className="font-bold"
             style={{ fontFamily: 'Diatype, sans-serif', fontSize: '2.5rem', letterSpacing: '-0.03em', color: '#175242' }}
           >
-            103
+            83
           </span>
-          <span className="text-sm" style={{ color: '#89837C' }}>min/week total (1.7 hrs)</span>
+          <span className="text-sm" style={{ color: '#89837C' }}>min/week total (1.4 hrs)</span>
         </div>
         <p className="font-caption text-xs mt-1" style={{ color: '#B2AAA1' }}>
-          Before Slack integrations. Range: 55 min (low) to 206 min (high adoption).
+          Before Slack integrations. Range: 45 min (low) to 146 min (high adoption).
         </p>
       </div>
 
